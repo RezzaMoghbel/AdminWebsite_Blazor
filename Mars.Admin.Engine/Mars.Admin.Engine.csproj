@@ -6,4 +6,9 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\Mars.Admin.Data\Mars.Admin.Data.csproj" />
+    <ProjectReference Include="..\Mars.Admin.DTOs\Mars.Admin.DTOs.csproj" />
+  </ItemGroup>
+
 </Project>
