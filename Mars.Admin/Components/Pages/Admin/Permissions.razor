@@ -1,0 +1,925 @@
+@page "/admin/permissions"
+@using Mars.Admin.Data
+@using Mars.Admin.Services
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.EntityFrameworkCore
+@using System.ComponentModel.DataAnnotations
+@inject ApplicationDbContext DbContext
+@inject IUserScope UserScope
+@inject ILogger<Permissions> Logger
+@attribute [Authorize(Policy = "Permission.Read")]
+
+@rendermode InteractiveServer
+
+<PageTitle>Permission Management</PageTitle>
+
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <h2><i class="bi bi-shield-lock"></i> Permission Management</h2>
+            <p class="text-muted">Manage system permissions and their assignments to roles</p>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">Permissions</h5>
+                    @if (UserScope.HasPermission("Permission.Create"))
+                    {
+                        <button class="btn btn-primary" @onclick="ShowCreateModal">
+                            <i class="bi bi-plus-lg"></i> Add Permission
+                        </button>
+                    }
+                </div>
+                <div class="card-body">
+                    <!-- Search Controls -->
+                    <div class="row mb-3">
+                        <div class="col-md-4">
+                            <div class="input-group">
+                                <span class="input-group-text">
+                                    <i class="bi bi-search"></i>
+                                </span>
+                                <input type="text"
+                                       class="form-control"
+                                       placeholder="Search permissions..."
+                                       value="@searchText"
+                                       @oninput="OnSearchInput" />
+                                <button class="btn btn-outline-secondary" @onclick="ClearSearch" type="button">
+                                    <i class="bi bi-x-lg"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <select class="form-select" @bind="SearchField">
+                                <option value="Name">Name</option>
+                                <option value="Description">Description</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="d-flex align-items-center">
+                                <input class="form-check-input" type="checkbox" id="showInactive"
+                                       @bind="ShowInactivePermissions"
+                                       style="transform: scale(1.5); margin-top: 0;">
+                                <span class="fw-medium ms-3">Show Inactive</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    @if (isLoading)
+                    {
+                        <div class="text-center">
+                            <div class="spinner-border" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="table-responsive">
+                            <table class="table table-striped table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Name</th>
+                                        <th>Description</th>
+                                        <th>Active</th>
+                                        <th>Roles</th>
+                                        <th>Created</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var permission in filteredPermissions)
+                                    {
+                                        var hasRoles = permission.UserRolePermissions?.Any() == true;
+                                        <tr class="@(permission.IsActive ? "" : "table-secondary opacity-75")">
+                                            <td>
+                                                <strong>@permission.Name</strong>
+                                                @if (hasRoles)
+                                                {
+                                                    <span class="badge bg-info ms-2" title="Assigned to @permission?.UserRolePermissions?.Count role(s)">Protected</span>
+                                                }
+                                            </td>
+                                            <td>@permission?.Description</td>
+                                            <td>
+                                                @if (permission!.IsActive)
+                                                {
+                                                    <span class="badge bg-success">Active</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="badge bg-secondary">Inactive</span>
+                                                }
+                                            </td>
+                                            <td>
+                                                <span class="badge bg-info">@(permission?.UserRolePermissions?.Count ?? 0)</span>
+                                            </td>
+                                            <td>@permission?.CreatedAt.ToString("yyyy-MM-dd")</td>
+                                            <td>
+                                                <div class="btn-group" role="group">
+                                                    <button class="btn btn-sm btn-outline-primary" @onclick="() => ViewPermission(permission!.Id)" title="View Details">
+                                                        <i class="bi bi-eye"></i>
+                                                    </button>
+                                                    @if (UserScope.HasPermission("Permission.Update"))
+                                                    {
+                                                        <button class="btn btn-sm btn-outline-secondary" @onclick="() => EditPermission(permission!.Id)" title="Edit Permission">
+                                                            <i class="bi bi-pencil-square"></i>
+                                                        </button>
+                                                    }
+                                                    @if (UserScope.HasPermission("Permission.Update"))
+                                                    {
+                                                        @if (permission!.IsActive)
+                                                        {
+                                                            @if (hasRoles)
+                                                            {
+                                                                <button class="btn btn-sm btn-outline-warning" disabled title="Cannot deactivate permission assigned to roles">
+                                                                    <i class="bi bi-pause-circle"></i>
+                                                                </button>
+                                                            }
+                                                            else
+                                                            {
+                                                                <button class="btn btn-sm btn-outline-warning" @onclick='() => ShowConfirmationModal(permission!.Id, "deactivate")' title="Deactivate Permission">
+                                                                    <i class="bi bi-pause-circle"></i>
+                                                                </button>
+                                                            }
+                                                        }
+                                                        else
+                                                        {
+                                                            <button class="btn btn-sm btn-outline-success" @onclick='() => ShowConfirmationModal(permission!.Id, "activate")' title="Activate Permission">
+                                                                <i class="bi bi-play-circle"></i>
+                                                            </button>
+                                                        }
+                                                    }
+                                                    @if (UserScope.HasPermission("Permission.Delete"))
+                                                    {
+                                                        @if (hasRoles)
+                                                        {
+                                                            <button class="btn btn-sm btn-outline-danger" disabled title="Cannot delete permission assigned to roles">
+                                                                <i class="bi bi-trash"></i>
+                                                            </button>
+                                                        }
+                                                        else
+                                                        {
+                                                            <button class="btn btn-sm btn-outline-danger" @onclick='() => ShowConfirmationModal(permission!.Id, "delete")' title="Delete Permission">
+                                                                <i class="bi bi-trash"></i>
+                                                            </button>
+                                                        }
+                                                    }
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add Permission Modal -->
+@if (showCreateModal)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-plus-lg"></i> Add New Permission</h5>
+                    <button type="button" class="btn-close" @onclick="CloseCreateModal"></button>
+                </div>
+                <div class="modal-body">
+                    <EditForm Model="permissionFormModel" OnInvalidSubmit="OnInvalidSubmit">
+                        <DataAnnotationsValidator />
+                        <ValidationSummary class="text-danger" />
+                        
+                        @if (!string.IsNullOrEmpty(createErrorMessage))
+                        {
+                            <div class="alert alert-danger">
+                                @createErrorMessage
+                            </div>
+                        }
+
+                        <div class="mb-3">
+                            <label class="form-label">Permission Name <span class="text-danger">*</span></label>
+                            <InputText class="form-control" @bind-Value="permissionFormModel.Name" placeholder="Enter permission name (e.g., User.Read)" />
+                            <ValidationMessage For="@(() => permissionFormModel.Name)" class="text-danger" />
+                            <div class="form-text">Use dot notation for hierarchical permissions (e.g., User.Read, User.Update)</div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Description</label>
+                            <InputTextArea class="form-control" @bind-Value="permissionFormModel.Description" rows="3" placeholder="Enter permission description" />
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Status</label>
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" @bind="permissionFormModel.IsActive">
+                                <label class="form-check-label">Active</label>
+                            </div>
+                        </div>
+                    </EditForm>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseCreateModal">Cancel</button>
+                    <button type="button" class="btn btn-primary" @onclick="CreatePermission">
+                        <i class="bi bi-check-lg"></i> Create Permission
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- View Permission Modal -->
+@if (showViewModal && selectedPermission != null)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-eye"></i> Permission Details</h5>
+                    <button type="button" class="btn-close" @onclick="CloseViewModal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6>Basic Information</h6>
+                            <table class="table table-sm">
+                                <tr>
+                                    <td><strong>Name:</strong></td>
+                                    <td>@selectedPermission.Name</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Description:</strong></td>
+                                    <td>@(selectedPermission.Description ?? "No description")</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Status:</strong></td>
+                                    <td>
+                                        @if (selectedPermission.IsActive)
+                                        {
+                                            <span class="badge bg-success">Active</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-secondary">Inactive</span>
+                                        }
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Created:</strong></td>
+                                    <td>@selectedPermission.CreatedAt.ToString("yyyy-MM-dd HH:mm")</td>
+                                </tr>
+                                @if (selectedPermission.ModifiedAt.HasValue)
+                                {
+                                    <tr>
+                                        <td><strong>Modified:</strong></td>
+                                        <td>@selectedPermission.ModifiedAt.Value.ToString("yyyy-MM-dd HH:mm")</td>
+                                    </tr>
+                                }
+                            </table>
+                        </div>
+                        <div class="col-md-6">
+                            <h6>Roles with this Permission</h6>
+                            @if (selectedPermission.UserRolePermissions?.Any() == true)
+                            {
+                                <div class="list-group">
+                                    @foreach (var rolePermission in selectedPermission.UserRolePermissions.Where(rp => rp.IsActive))
+                                    {
+                                        <div class="list-group-item d-flex justify-content-between align-items-center">
+                                            <span>@rolePermission.UserRole?.Name</span>
+                                            <span class="badge @(rolePermission.IsGranted ? "bg-success" : "bg-danger")">
+                                                @(rolePermission.IsGranted ? "Granted" : "Denied")
+                                            </span>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                            else
+                            {
+                                <p class="text-muted">No roles assigned to this permission</p>
+                            }
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseViewModal">Close</button>
+                    @if (UserScope.HasPermission("Permission.Update"))
+                    {
+                        <button type="button" class="btn btn-primary" @onclick="async () => { var permissionId = selectedPermission?.Id; CloseViewModal(); if (permissionId.HasValue) await EditPermission(permissionId.Value); }">
+                            <i class="bi bi-pencil-square"></i> Edit Permission
+                        </button>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Edit Permission Modal -->
+@if (showEditModal && selectedPermission != null)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-pencil-square"></i> Edit Permission</h5>
+                    <button type="button" class="btn-close" @onclick="CloseEditModal"></button>
+                </div>
+                <div class="modal-body">
+                    <EditForm Model="editPermissionFormModel" OnInvalidSubmit="OnInvalidSubmit">
+                        <DataAnnotationsValidator />
+                        <ValidationSummary class="text-danger" />
+                        
+                        @if (!string.IsNullOrEmpty(editErrorMessage))
+                        {
+                            <div class="alert alert-danger">
+                                @editErrorMessage
+                            </div>
+                        }
+
+                        <div class="mb-3">
+                            <label class="form-label">Permission Name <span class="text-danger">*</span></label>
+                            <InputText class="form-control" @bind-Value="editPermissionFormModel.Name" placeholder="Enter permission name (e.g., User.Read)" />
+                            <ValidationMessage For="@(() => editPermissionFormModel.Name)" class="text-danger" />
+                            <div class="form-text">Use dot notation for hierarchical permissions (e.g., User.Read, User.Update)</div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Description</label>
+                            <InputTextArea class="form-control" @bind-Value="editPermissionFormModel.Description" rows="3" placeholder="Enter permission description" />
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Status</label>
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" @bind="editPermissionFormModel.IsActive">
+                                <label class="form-check-label">Active</label>
+                            </div>
+                        </div>
+                    </EditForm>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseEditModal">Cancel</button>
+                    <button type="button" class="btn btn-primary" @onclick="UpdatePermission">
+                        <i class="bi bi-check-lg"></i> Update Permission
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Confirmation Modal -->
+@if (showConfirmationModal && selectedPermission != null)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        @if (confirmationAction == "deactivate")
+                        {
+                            <text><i class="bi bi-exclamation-triangle text-warning"></i> Confirm Deactivation</text>
+                        }
+                        else if (confirmationAction == "activate")
+                        {
+                            <text>
+                                <i class="bi bi-check-circle text-success"></i>
+                                Confirm Activation
+                            </text>
+                        }
+                        else if (confirmationAction == "delete")
+                        {
+                            <text>
+                                <i class="bi bi-exclamation-triangle text-danger"></i>
+                                Confirm Deletion
+                            </text>
+                        }
+                    </h5>
+                    <button type="button" class="btn-close" @onclick="CloseConfirmationModal"></button>
+                </div>
+                <div class="modal-body">
+                    @if (confirmationAction == "deactivate")
+                    {
+                        <p>You are about to <strong>deactivate</strong> the following permission:</p>
+                        <div class="alert alert-warning">
+                            <strong>Name:</strong> @selectedPermission.Name<br>
+                            <strong>Description:</strong> @(selectedPermission.Description ?? "No description")<br>
+                            <strong>Roles:</strong> @(selectedPermission.UserRolePermissions?.Count ?? 0)
+                        </div>
+                        @if (selectedPermission.UserRolePermissions?.Any() == true)
+                        {
+                            <div class="alert alert-danger">
+                                <strong>Warning:</strong> This permission is assigned to @selectedPermission.UserRolePermissions.Count role(s). 
+                                Deactivating this permission will affect all users with those roles.
+                            </div>
+                        }
+                        <p class="mb-0">This action will prevent this permission from being used in the system. The permission can be reactivated later if needed.</p>
+                    }
+                    else if (confirmationAction == "activate")
+                    {
+                        <p>You are about to <strong>activate</strong> the following permission:</p>
+                        <div class="alert alert-success">
+                            <strong>Name:</strong> @selectedPermission.Name<br>
+                            <strong>Description:</strong> @(selectedPermission.Description ?? "No description")<br>
+                            <strong>Roles:</strong> @(selectedPermission.UserRolePermissions?.Count ?? 0)
+                        </div>
+                        <p class="mb-0">This action will allow this permission to be used in the system.</p>
+                    }
+                    else if (confirmationAction == "delete")
+                    {
+                        <p>You are about to <strong>permanently delete</strong> the following permission:</p>
+                        <div class="alert alert-danger">
+                            <strong>Name:</strong> @selectedPermission.Name<br>
+                            <strong>Description:</strong> @(selectedPermission.Description ?? "No description")<br>
+                            <strong>Roles:</strong> @(selectedPermission.UserRolePermissions?.Count ?? 0)
+                        </div>
+                        @if (selectedPermission.UserRolePermissions?.Any() == true)
+                        {
+                            <div class="alert alert-danger">
+                                <strong>CRITICAL WARNING:</strong> This permission is assigned to @selectedPermission.UserRolePermissions.Count role(s). 
+                                <strong>This action cannot be performed while roles are assigned to this permission.</strong>
+                            </div>
+                        }
+                        <p class="mb-0"><strong>Warning:</strong> This action cannot be undone. The permission will be permanently removed from the system.</p>
+                    }
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseConfirmationModal">Cancel</button>
+                    @if (confirmationAction == "deactivate")
+                    {
+                        @if (selectedPermission.UserRolePermissions?.Any() == true)
+                        {
+                            <button type="button" class="btn btn-warning" disabled title="Cannot deactivate permission assigned to roles">
+                                <i class="bi bi-pause-circle"></i> Deactivate Permission
+                            </button>
+                        }
+                        else
+                        {
+                            <button type="button" class="btn btn-warning" @onclick="ConfirmTogglePermissionActive">
+                                <i class="bi bi-pause-circle"></i> Deactivate Permission
+                            </button>
+                        }
+                    }
+                    else if (confirmationAction == "activate")
+                    {
+                        <button type="button" class="btn btn-success" @onclick="ConfirmTogglePermissionActive">
+                            <i class="bi bi-play-circle"></i> Activate Permission
+                        </button>
+                    }
+                    else if (confirmationAction == "delete")
+                    {
+                        @if (selectedPermission.UserRolePermissions?.Any() == true)
+                        {
+                            <button type="button" class="btn btn-danger" disabled title="Cannot delete permission assigned to roles">
+                                <i class="bi bi-trash"></i> Delete Permission
+                            </button>
+                        }
+                        else
+                        {
+                            <button type="button" class="btn btn-danger" @onclick="ConfirmDeletePermission">
+                                <i class="bi bi-trash"></i> Delete Permission
+                            </button>
+                        }
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<Permission> allPermissions = new();
+    private List<Permission> filteredPermissions = new();
+    private bool isLoading = true;
+    
+    // Search and filter
+    private string searchText = string.Empty;
+    private string _searchField = "Name";
+    private bool showInactivePermissions = false;
+    
+    // Modal states
+    private bool showCreateModal = false;
+    private bool showViewModal = false;
+    private bool showEditModal = false;
+    private bool showConfirmationModal = false;
+    private string confirmationAction = string.Empty;
+    private Permission? selectedPermission = null;
+    
+    // Form models
+    public class PermissionFormModel
+    {
+        [Required(ErrorMessage = "Permission name is required")]
+        [MaxLength(100, ErrorMessage = "Permission name cannot exceed 100 characters")]
+        public string Name { get; set; } = string.Empty;
+
+        [MaxLength(500, ErrorMessage = "Description cannot exceed 500 characters")]
+        public string? Description { get; set; }
+        
+        public bool IsActive { get; set; } = true;
+    }
+
+    public class EditPermissionFormModel
+    {
+        [Required(ErrorMessage = "Permission name is required")]
+        [MaxLength(100, ErrorMessage = "Permission name cannot exceed 100 characters")]
+        public string Name { get; set; } = string.Empty;
+
+        [MaxLength(500, ErrorMessage = "Description cannot exceed 500 characters")]
+        public string? Description { get; set; }
+        
+        public bool IsActive { get; set; } = true;
+    }
+    
+    private PermissionFormModel permissionFormModel = new();
+    private EditPermissionFormModel editPermissionFormModel = new();
+    
+    private string? createErrorMessage = null;
+    private string? editErrorMessage = null;
+
+    private string SearchField
+    {
+        get => _searchField;
+        set
+        {
+            _searchField = value;
+            ApplyFilter();
+            StateHasChanged();
+        }
+    }
+
+    private bool ShowInactivePermissions
+    {
+        get => showInactivePermissions;
+        set
+        {
+            showInactivePermissions = value;
+            ApplyFilter();
+            StateHasChanged();
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadPermissions();
+    }
+
+    private async Task LoadPermissions()
+    {
+        try
+        {
+            isLoading = true;
+            allPermissions = await DbContext.Permissions
+                .Include(p => p.UserRolePermissions)
+                    .ThenInclude(urp => urp.UserRole)
+                .OrderBy(p => p.Name)
+                .ToListAsync();
+            ApplyFilter();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading permissions");
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void ApplyFilter()
+    {
+        var query = allPermissions.AsQueryable();
+
+        if (!showInactivePermissions)
+        {
+            query = query.Where(p => p.IsActive);
+        }
+
+        if (!string.IsNullOrWhiteSpace(searchText))
+        {
+            query = SearchField switch
+            {
+                "Name" => query.Where(p => p.Name.Contains(searchText, StringComparison.OrdinalIgnoreCase)),
+                "Description" => query.Where(p => p.Description != null && p.Description.Contains(searchText, StringComparison.OrdinalIgnoreCase)),
+                _ => query
+            };
+        }
+
+        filteredPermissions = query.ToList();
+    }
+
+    private void OnSearchInput(ChangeEventArgs e)
+    {
+        searchText = e.Value?.ToString() ?? string.Empty;
+        ApplyFilter();
+        StateHasChanged();
+    }
+
+    private void ClearSearch()
+    {
+        searchText = string.Empty;
+        ApplyFilter();
+        StateHasChanged();
+    }
+
+    private void ShowCreateModal()
+    {
+        createErrorMessage = null;
+        permissionFormModel = new PermissionFormModel
+        {
+            Name = string.Empty,
+            Description = string.Empty,
+            IsActive = true
+        };
+        showCreateModal = true;
+        StateHasChanged();
+    }
+
+    private void CloseCreateModal()
+    {
+        showCreateModal = false;
+        permissionFormModel = new PermissionFormModel();
+        StateHasChanged();
+    }
+
+    private async Task ViewPermission(int permissionId)
+    {
+        try
+        {
+            selectedPermission = await DbContext.Permissions
+                .Include(p => p.UserRolePermissions)
+                    .ThenInclude(urp => urp.UserRole)
+                .FirstOrDefaultAsync(p => p.Id == permissionId);
+            
+            if (selectedPermission != null)
+            {
+                showViewModal = true;
+                StateHasChanged();
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading permission for view");
+        }
+    }
+
+    private void CloseViewModal()
+    {
+        showViewModal = false;
+        selectedPermission = null;
+        StateHasChanged();
+    }
+
+    private async Task EditPermission(int permissionId)
+    {
+        try
+        {
+            editErrorMessage = null;
+            selectedPermission = await DbContext.Permissions
+                .Include(p => p.UserRolePermissions)
+                    .ThenInclude(urp => urp.UserRole)
+                .FirstOrDefaultAsync(p => p.Id == permissionId);
+            
+            if (selectedPermission != null)
+            {
+                editPermissionFormModel = new EditPermissionFormModel
+                {
+                    Name = selectedPermission.Name,
+                    Description = selectedPermission.Description,
+                    IsActive = selectedPermission.IsActive
+                };
+                
+                showEditModal = true;
+                StateHasChanged();
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading permission for edit");
+        }
+    }
+
+    private void CloseEditModal()
+    {
+        showEditModal = false;
+        selectedPermission = null;
+        editPermissionFormModel = new EditPermissionFormModel();
+        StateHasChanged();
+    }
+
+    private void OnInvalidSubmit(EditContext editContext)
+    {
+        Logger.LogWarning("Form validation failed");
+        StateHasChanged();
+    }
+
+    private async Task CreatePermission()
+    {
+        try
+        {
+            // Clear any previous error messages
+            createErrorMessage = null;
+
+            // Check if permission name already exists
+            var existingPermission = await DbContext.Permissions
+                .FirstOrDefaultAsync(p => p.Name.ToLower() == permissionFormModel.Name.ToLower());
+            
+            if (existingPermission != null)
+            {
+                createErrorMessage = "A permission with this name already exists.";
+                StateHasChanged();
+                return;
+            }
+
+            var newPermission = new Permission
+            {
+                Name = permissionFormModel.Name,
+                Description = permissionFormModel.Description,
+                IsActive = permissionFormModel.IsActive,
+                CreatedAt = DateTime.UtcNow,
+                CreatedByUserId = UserScope.UserId
+            };
+
+            DbContext.Permissions.Add(newPermission);
+            await DbContext.SaveChangesAsync();
+
+            await LoadPermissions();
+            CloseCreateModal();
+            StateHasChanged();
+
+            Logger.LogInformation("Permission {PermissionName} created successfully", newPermission.Name);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error creating permission");
+            createErrorMessage = "An error occurred while creating the permission. Please try again.";
+            StateHasChanged();
+        }
+    }
+
+    private async Task UpdatePermission()
+    {
+        try
+        {
+            if (selectedPermission == null) return;
+
+            // Clear any previous error messages
+            editErrorMessage = null;
+
+            // Store the permission name for logging before any changes
+            var permissionName = selectedPermission.Name;
+
+            // Check if permission name already exists (excluding current permission)
+            var existingPermission = await DbContext.Permissions
+                .FirstOrDefaultAsync(p => p.Name.ToLower() == editPermissionFormModel.Name.ToLower() && p.Id != selectedPermission.Id);
+            
+            if (existingPermission != null)
+            {
+                editErrorMessage = "A permission with this name already exists.";
+                StateHasChanged();
+                return;
+            }
+
+            selectedPermission.Name = editPermissionFormModel.Name;
+            selectedPermission.Description = editPermissionFormModel.Description;
+            selectedPermission.IsActive = editPermissionFormModel.IsActive;
+            selectedPermission.ModifiedAt = DateTime.UtcNow;
+            selectedPermission.ModifiedByUserId = UserScope.UserId;
+
+            await DbContext.SaveChangesAsync();
+
+            await LoadPermissions();
+            CloseEditModal();
+            StateHasChanged();
+
+            Logger.LogInformation("Permission {PermissionName} updated successfully", permissionName);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error updating permission");
+            editErrorMessage = "An error occurred while updating the permission. Please try again.";
+            StateHasChanged();
+        }
+    }
+
+    private async Task ShowConfirmationModal(int permissionId, string action)
+    {
+        try
+        {
+            selectedPermission = await DbContext.Permissions
+                .Include(p => p.UserRolePermissions)
+                    .ThenInclude(urp => urp.UserRole)
+                .FirstOrDefaultAsync(p => p.Id == permissionId);
+            
+            if (selectedPermission != null)
+            {
+                confirmationAction = action;
+                showConfirmationModal = true;
+                StateHasChanged();
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading permission for confirmation");
+        }
+    }
+
+    private void CloseConfirmationModal()
+    {
+        showConfirmationModal = false;
+        confirmationAction = string.Empty;
+        selectedPermission = null;
+        StateHasChanged();
+    }
+
+    private async Task ConfirmTogglePermissionActive()
+    {
+        if (selectedPermission != null)
+        {
+            await TogglePermissionActive(selectedPermission.Id);
+            CloseConfirmationModal();
+        }
+    }
+
+    private async Task ConfirmDeletePermission()
+    {
+        if (selectedPermission != null)
+        {
+            await DeletePermission(selectedPermission.Id);
+            CloseConfirmationModal();
+        }
+    }
+
+    private async Task TogglePermissionActive(int permissionId)
+    {
+        try
+        {
+            var permission = await DbContext.Permissions
+                .Include(p => p.UserRolePermissions)
+                .FirstOrDefaultAsync(p => p.Id == permissionId);
+            
+            if (permission != null)
+            {
+                // Prevent deactivation if roles are assigned
+                if (!permission.IsActive && permission.UserRolePermissions.Any())
+                {
+                    Logger.LogWarning("Cannot deactivate permission {PermissionName} because it is assigned to {RoleCount} roles", permission.Name, permission.UserRolePermissions.Count);
+                    return;
+                }
+
+                permission.IsActive = !permission.IsActive;
+                permission.ModifiedAt = DateTime.UtcNow;
+                permission.ModifiedByUserId = UserScope.UserId;
+                
+                await DbContext.SaveChangesAsync();
+
+                await LoadPermissions();
+                StateHasChanged();
+
+                var status = permission.IsActive ? "activated" : "deactivated";
+                Logger.LogInformation("Permission {PermissionName} {Status} successfully", permission.Name, status);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error toggling permission active status");
+        }
+    }
+
+    private async Task DeletePermission(int permissionId)
+    {
+        try
+        {
+            var permission = await DbContext.Permissions
+                .Include(p => p.UserRolePermissions)
+                .FirstOrDefaultAsync(p => p.Id == permissionId);
+            
+            if (permission != null)
+            {
+                // Check if permission has roles assigned
+                if (permission.UserRolePermissions.Any())
+                {
+                    Logger.LogWarning("Cannot delete permission {PermissionName} because it is assigned to {RoleCount} roles", permission.Name, permission.UserRolePermissions.Count);
+                    return;
+                }
+
+                DbContext.Permissions.Remove(permission);
+                await DbContext.SaveChangesAsync();
+
+                await LoadPermissions();
+                StateHasChanged();
+
+                Logger.LogInformation("Permission {PermissionName} deleted successfully", permission.Name);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error deleting permission");
+        }
+    }
+}

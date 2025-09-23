@@ -1,0 +1,1097 @@
+@page "/admin/ip-safe-listing"
+@using Mars.Admin.Data
+@using Mars.Admin.Services
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.EntityFrameworkCore
+@using System.ComponentModel.DataAnnotations
+@using System.Net
+@inject ApplicationDbContext DbContext
+@inject IUserScope UserScope
+@inject ILogger<IpSafeListing> Logger
+@attribute [Authorize(Policy = "IPSafeListing.Read")]
+
+@rendermode InteractiveServer
+
+<PageTitle>IP Safe Listing</PageTitle>
+
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <h2><i class="bi bi-shield-check"></i> IP Safe Listing</h2>
+            <p class="text-muted">Manage IP addresses that are allowed to access the system</p>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">IP Safe Listings</h5>
+                    @if (UserScope.HasPermission("IPSafeListing.Create"))
+                    {
+                        <button class="btn btn-primary" @onclick="ShowAddModal">
+                            <i class="bi bi-plus-lg"></i> Add IP
+                        </button>
+                    }
+                </div>
+                <div class="card-body">
+                    <!-- Search Controls -->
+                    <div class="row mb-3">
+                        <div class="col-md-3">
+                            <div class="input-group">
+                                <span class="input-group-text">
+                                    <i class="bi bi-search"></i>
+                                </span>
+                                <input type="text"
+                                       class="form-control"
+                                       placeholder="Search IP addresses..."
+                                       value="@searchText"
+                                       @oninput="OnSearchInput" />
+                                <button class="btn btn-outline-secondary" @onclick="ClearSearch" type="button">
+                                    <i class="bi bi-x-lg"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="col-md-2">
+                            <select class="form-select" @bind="SearchField">
+                                <option value="IPAddress">IP Address</option>
+                                <option value="Label">Label</option>
+                                <option value="User">User</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="d-flex align-items-center">
+                                <input class="form-check-input" type="checkbox" id="showInactive"
+                                       @bind="ShowInactiveIPs"
+                                       style="transform: scale(1.5); margin-top: 0;">
+                                <span class="fw-medium ms-3">Show Inactive</span>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="d-flex align-items-center">
+                                <input class="form-check-input" type="checkbox" id="showExpired"
+                                       @bind="ShowExpiredIPs"
+                                       style="transform: scale(1.5); margin-top: 0;">
+                                <span class="fw-medium ms-3">Show Expired</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Tabs for Office and Individual IPs -->
+                    <ul class="nav nav-tabs mb-3" id="ipTabs" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link @(activeTab == "office" ? "active" : "")" 
+                                    @onclick="@(() => SetActiveTab("office"))" 
+                                    type="button" role="tab">
+                                <i class="bi bi-building"></i> Office IPs
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link @(activeTab == "individual" ? "active" : "")" 
+                                    @onclick="@(() => SetActiveTab("individual"))" 
+                                    type="button" role="tab">
+                                <i class="bi bi-person"></i> Individual IPs
+                            </button>
+                        </li>
+                    </ul>
+
+                    @if (isLoading)
+                    {
+                        <div class="text-center">
+                            <div class="spinner-border" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="table-responsive">
+                            <table class="table table-striped table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>IP Address</th>
+                                        <th>Type</th>
+                                        <th>Label</th>
+                                        <th>User</th>
+                                        <th>Active</th>
+                                        <th>Expiry Date</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var ip in filteredIPs)
+                                    {
+                                        var isExpired = ip.ExpiryDate.HasValue && ip.ExpiryDate.Value <= DateTime.UtcNow;
+                                        var rowClass = "";
+                                        if (!ip.IsActive)
+                                        {
+                                            rowClass = "table-secondary opacity-75";
+                                        }
+                                        else if (isExpired)
+                                        {
+                                            rowClass = "table-danger opacity-75";
+                                        }
+                                        <tr class="@rowClass">
+                                            <td>
+                                                <code>@ip.IPAddress</code>
+                                            </td>
+                                            <td>
+                                                @if (ip.UserId == null)
+                                                {
+                                                    <span class="badge bg-primary">Office</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="badge bg-info">Individual</span>
+                                                }
+                                            </td>
+                                            <td>@ip.Label</td>
+                                            <td>
+                                                @if (ip.User != null)
+                                                {
+                                                    <span>@ip.User.Email</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="text-muted">N/A</span>
+                                                }
+                                            </td>
+                                            <td>
+                                                @if (ip.IsActive)
+                                                {
+                                                    <span class="badge bg-success">Active</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="badge bg-secondary">Inactive</span>
+                                                }
+                                            </td>
+                                            <td>
+                                                @if (ip.ExpiryDate.HasValue)
+                                                {
+                                                 @*    bool isExpired = ip.ExpiryDate.Value <= DateTime.UtcNow; *@
+                                                    if (isExpired)
+                                                    {
+                                                        <span class="fw-bold text-danger">@ip.ExpiryDate.Value.ToString("yyyy-MM-dd")</span>
+                                                    }
+                                                    else
+                                                    {
+                                                        @ip.ExpiryDate.Value.ToString("yyyy-MM-dd")
+                                                    }
+                                                }
+                                                else
+                                                {
+                                                    <span class="text-muted">Never</span>
+                                                }
+                                            </td>
+                                            <td>
+                                                <div class="btn-group" role="group">
+                                                    <button class="btn btn-sm btn-outline-primary" @onclick="() => ViewIP(ip.Id)" title="View Details">
+                                                        <i class="bi bi-eye"></i>
+                                                    </button>
+                                                    @if (UserScope.HasPermission("IPSafeListing.Update"))
+                                                    {
+                                                        <button class="btn btn-sm btn-outline-secondary" @onclick="() => EditIP(ip.Id)" title="Edit IP">
+                                                            <i class="bi bi-pencil-square"></i>
+                                                        </button>
+                                                    }
+                                                    @if (UserScope.HasPermission("IPSafeListing.Update"))
+                                                    {
+                                                        @if (ip.IsActive)
+                                                        {
+                                                            <button class="btn btn-sm btn-outline-warning" @onclick='() => ShowConfirmationModal(ip.Id, "deactivate")' title="Deactivate IP">
+                                                                <i class="bi bi-pause-circle"></i>
+                                                            </button>
+                                                        }
+                                                        else
+                                                        {
+                                                            <button class="btn btn-sm btn-outline-success" @onclick='() => ShowConfirmationModal(ip.Id, "activate")' title="Activate IP">
+                                                                <i class="bi bi-play-circle"></i>
+                                                            </button>
+                                                        }
+                                                    }
+                                                    @if (UserScope.HasPermission("IPSafeListing.Delete"))
+                                                    {
+                                                        <button class="btn btn-sm btn-outline-danger" @onclick='() => ShowConfirmationModal(ip.Id, "delete")' title="Delete IP">
+                                                            <i class="bi bi-trash"></i>
+                                                        </button>
+                                                    }
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add IP Modal -->
+@if (showAddModal)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Add New IP</h5>
+                    <button type="button" class="btn-close" @onclick="CloseAddModal"></button>
+                </div>
+                <div class="modal-body">
+                    <EditForm Model="@ipFormModel" OnValidSubmit="CreateIP" OnInvalidSubmit="OnInvalidSubmit" autocomplete="off" id="ipForm">
+                        <DataAnnotationsValidator />
+                        <ValidationSummary class="text-danger mb-3" />
+                        @if (!string.IsNullOrEmpty(addErrorMessage))
+                        {
+                            <div class="alert alert-danger mb-3">@addErrorMessage</div>
+                        }
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">IP Address *</label>
+                                <InputText @bind-Value="ipFormModel.IPAddress" class="form-control" placeholder="192.168.1.1 or 192.168.1.0/24" autocomplete="off" />
+                                <ValidationMessage For="@(() => ipFormModel.IPAddress)" class="text-danger" />
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Label</label>
+                                <InputText @bind-Value="ipFormModel.Label" class="form-control" placeholder="Office network or User's home IP" autocomplete="off" />
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">User</label>
+                                <InputSelect @bind-Value="ipFormModel.UserId" class="form-select">
+                                    <option value="">Select User (for Individual IPs)</option>
+                                    @foreach (var user in availableUsers)
+                                    {
+                                        <option value="@user.Id">@user.Email</option>
+                                    }
+                                </InputSelect>
+                                <small class="form-text text-muted">Leave blank for Office IP, select user for Individual IP</small>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Expiry Date</label>
+                                <InputDate @bind-Value="ipFormModel.ExpiryDate" class="form-control" />
+                                <small class="form-text text-muted">Leave empty for no expiry</small>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Active Status</label>
+                                <div class="form-check form-switch">
+                                    <InputCheckbox @bind-Value="ipFormModel.IsActive" class="form-check-input" />
+                                    <label class="form-check-label">IP is active</label>
+                                </div>
+                            </div>
+                        </div>
+                    </EditForm>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseAddModal">Cancel</button>
+                    <button type="submit" class="btn btn-primary" form="ipForm">
+                        <i class="bi bi-plus-lg"></i> Add IP
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- View IP Modal -->
+@if (showViewModal && selectedIP != null)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">IP Details</h5>
+                    <button type="button" class="btn-close" @onclick="CloseViewModal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6>Basic Information</h6>
+                            <table class="table table-sm">
+                                <tr>
+                                    <td><strong>IP Address:</strong></td>
+                                    <td><code>@selectedIP.IPAddress</code></td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Type:</strong></td>
+                                    <td>
+                                        @if (selectedIP.UserId == null)
+                                        {
+                                            <span class="badge bg-primary">Office</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-info">Individual</span>
+                                        }
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Label:</strong></td>
+                                    <td>@selectedIP.Label</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>User:</strong></td>
+                                    <td>
+                                        @if (selectedIP.User != null)
+                                        {
+                                            <span>@selectedIP.User.Email</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted">N/A</span>
+                                        }
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Active:</strong></td>
+                                    <td>
+                                        @if (selectedIP.IsActive)
+                                        {
+                                            <span class="badge bg-success">Active</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-secondary">Inactive</span>
+                                        }
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Expiry Date:</strong></td>
+                                    <td>
+                                        @if (selectedIP.ExpiryDate.HasValue)
+                                        {
+                                            @selectedIP.ExpiryDate.Value.ToString("yyyy-MM-dd")
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted">Never</span>
+                                        }
+                                    </td>
+                                </tr>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseViewModal">Close</button>
+                    @if (UserScope.HasPermission("IPSafeListing.Update"))
+                    {
+                        <button type="button" class="btn btn-primary" @onclick="async () => { var ipId = selectedIP?.Id; CloseViewModal(); if (ipId.HasValue) await EditIP(ipId.Value); }">
+                            <i class="bi bi-pencil-square"></i> Edit IP
+                        </button>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Edit IP Modal -->
+@if (showEditModal && selectedIP != null)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Edit IP</h5>
+                    <button type="button" class="btn-close" @onclick="CloseEditModal"></button>
+                </div>
+                <div class="modal-body">
+                    <EditForm Model="@editIPFormModel" OnValidSubmit="UpdateIP" OnInvalidSubmit="OnInvalidSubmit" autocomplete="off" id="editForm">
+                        <DataAnnotationsValidator />
+                        <ValidationSummary class="text-danger mb-3" />
+                        @if (!string.IsNullOrEmpty(editErrorMessage))
+                        {
+                            <div class="alert alert-danger mb-3">@editErrorMessage</div>
+                        }
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">IP Address *</label>
+                                <InputText @bind-Value="editIPFormModel.IPAddress" class="form-control" placeholder="192.168.1.1 or 192.168.1.0/24" autocomplete="off" />
+                                <ValidationMessage For="@(() => editIPFormModel.IPAddress)" class="text-danger" />
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Label</label>
+                                <InputText @bind-Value="editIPFormModel.Label" class="form-control" placeholder="Office network or User's home IP" autocomplete="off" />
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">User</label>
+                                <InputSelect @bind-Value="editIPFormModel.UserId" class="form-select">
+                                    <option value="">Select User (for Individual IPs)</option>
+                                    @foreach (var user in availableUsers)
+                                    {
+                                        <option value="@user.Id">@user.Email</option>
+                                    }
+                                </InputSelect>
+                                <small class="form-text text-muted">Leave blank for Office IP, select user for Individual IP</small>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Expiry Date</label>
+                                <InputDate @bind-Value="editIPFormModel.ExpiryDate" class="form-control" />
+                                <small class="form-text text-muted">Leave empty for no expiry</small>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Active Status</label>
+                                <div class="form-check form-switch">
+                                    <InputCheckbox @bind-Value="editIPFormModel.IsActive" class="form-check-input" />
+                                    <label class="form-check-label">IP is active</label>
+                                </div>
+                            </div>
+                        </div>
+                    </EditForm>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseEditModal">Cancel</button>
+                    <button type="button" class="btn btn-primary" @onclick="UpdateIP">
+                        <i class="bi bi-check-lg"></i> Update IP
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Confirmation Modal -->
+@if (showConfirmationModal && selectedIP != null)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        @if (confirmationAction == "deactivate")
+                        {
+                            <text> <i class="bi bi-exclamation-triangle text-warning"></i> Confirm Deactivation</text>
+                            }
+                        else if (confirmationAction == "activate")
+                        {
+                            <text> <i class="bi bi-check-circle text-success"></i> Confirm Activation </text>
+                            }
+                        else if (confirmationAction == "delete")
+                        {
+                            <text><i class="bi bi-exclamation-triangle text-danger"></i> Confirm Deletion</text>
+                        }
+                    </h5>
+                    <button type="button" class="btn-close" @onclick="CloseConfirmationModal"></button>
+                </div>
+                <div class="modal-body">
+                    @if (confirmationAction == "deactivate")
+                    {
+                        <p>You are about to <strong>deactivate</strong> the following IP address:</p>
+                        <div class="alert alert-warning">
+                            <strong>IP Address:</strong> <code>@selectedIP.IPAddress</code><br>
+                            @if (!string.IsNullOrEmpty(selectedIP.Label))
+                            {
+                                <strong>Label:</strong> @selectedIP.Label<br>
+                            }
+                            @if (selectedIP.User != null)
+                            {
+                                <strong>Assigned User:</strong> @selectedIP.User.Email<br>
+                            }
+                            else
+                            {
+                                <text><strong>Type:</strong> Office IP<br /></text>
+                            }
+                        </div>
+                        <p class="mb-0">This action will prevent access from this IP address. The IP can be reactivated later if needed.</p>
+                    }
+                    else if (confirmationAction == "activate")
+                    {
+                        <p>You are about to <strong>activate</strong> the following IP address:</p>
+                        <div class="alert alert-success">
+                            <strong>IP Address:</strong> <code>@selectedIP.IPAddress</code><br>
+                            @if (!string.IsNullOrEmpty(selectedIP.Label))
+                            {
+                                <strong>Label:</strong> @selectedIP.Label<br>
+                            }
+                            @if (selectedIP.User != null)
+                            {
+                                <strong>Assigned User:</strong> @selectedIP.User.Email<br>
+                            }
+                            else
+                            {
+                                <text><strong>Type:</strong> Office IP<br></text>
+                            }
+                        </div>
+                        <p class="mb-0">This action will allow access from this IP address.</p>
+                    }
+                    else if (confirmationAction == "delete")
+                    {
+                        <p>You are about to <strong>permanently delete</strong> the following IP address:</p>
+                        <div class="alert alert-danger">
+                            <strong>IP Address:</strong> <code>@selectedIP.IPAddress</code><br>
+                            @if (!string.IsNullOrEmpty(selectedIP.Label))
+                            {
+                                <strong>Label:</strong> @selectedIP.Label<br>
+                            }
+                            @if (selectedIP.User != null)
+                            {
+                                <strong>Assigned User:</strong> @selectedIP.User.Email<br>
+                            }
+                            else
+                            {
+                                <text><strong>Type:</strong> Office IP<br></text>
+                            }
+                        </div>
+                        <p class="mb-0"><strong>Warning:</strong> This action cannot be undone. The IP address will be permanently removed from the safe listing.</p>
+                    }
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseConfirmationModal">Cancel</button>
+                    @if (confirmationAction == "deactivate")
+                    {
+                        <button type="button" class="btn btn-warning" @onclick="ConfirmToggleIPStatus">
+                            <i class="bi bi-pause-circle"></i> Deactivate IP
+                        </button>
+                    }
+                    else if (confirmationAction == "activate")
+                    {
+                        <button type="button" class="btn btn-success" @onclick="ConfirmToggleIPStatus">
+                            <i class="bi bi-play-circle"></i> Activate IP
+                        </button>
+                    }
+                    else if (confirmationAction == "delete")
+                    {
+                        <button type="button" class="btn btn-danger" @onclick="ConfirmDeleteIP">
+                            <i class="bi bi-trash"></i> Delete IP
+                        </button>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<IPSafeListing> allIPs = new();
+    private List<IPSafeListing> filteredIPs = new();
+    private List<ApplicationUser> availableUsers = new();
+    private bool isLoading = true;
+    
+    // Search and filter
+    private string searchText = string.Empty;
+    private string _searchField = "IPAddress";
+    private bool showInactiveIPs = false;
+    private bool showExpiredIPs = false;
+    private string activeTab = "office"; // "office" or "individual"
+    
+    // Modal states
+    private bool showAddModal = false;
+    private bool showViewModal = false;
+    private bool showEditModal = false;
+    private bool showConfirmationModal = false;
+    private string confirmationAction = string.Empty;
+    private IPSafeListing? selectedIP = null;
+    
+    // Form model for Add IP
+    public class IPFormModel
+    {
+        [Required(ErrorMessage = "IP Address is required")]
+        public string IPAddress { get; set; } = string.Empty;
+
+        public string? Label { get; set; }
+        public string? UserId { get; set; }
+        public DateTime? ExpiryDate { get; set; }
+        public bool IsActive { get; set; } = true;
+    }
+
+    public class EditIPFormModel
+    {
+        [Required(ErrorMessage = "IP Address is required")]
+        public string IPAddress { get; set; } = string.Empty;
+
+        public string? Label { get; set; }
+        public string? UserId { get; set; }
+        public DateTime? ExpiryDate { get; set; }
+        public bool IsActive { get; set; } = true;
+    }
+    
+    private IPFormModel ipFormModel = new();
+    private EditIPFormModel editIPFormModel = new();
+    
+    private string? addErrorMessage = null;
+    private string? editErrorMessage = null;
+
+    private string SearchField
+    {
+        get => _searchField;
+        set
+        {
+            _searchField = value;
+            ApplyFilter();
+            StateHasChanged();
+        }
+    }
+
+    private bool ShowInactiveIPs
+    {
+        get => showInactiveIPs;
+        set
+        {
+            showInactiveIPs = value;
+            ApplyFilter();
+            StateHasChanged();
+        }
+    }
+
+    private bool ShowExpiredIPs
+    {
+        get => showExpiredIPs;
+        set
+        {
+            showExpiredIPs = value;
+            ApplyFilter();
+            StateHasChanged();
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadIPs();
+        await LoadUsers();
+    }
+
+    private async Task LoadIPs()
+    {
+        try
+        {
+            isLoading = true;
+            allIPs = await DbContext.IPSafeListings
+                .Include(i => i.User)
+                .OrderBy(i => i.IPAddress)
+                .ToListAsync();
+            ApplyFilter();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading IP safe listings");
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task LoadUsers()
+    {
+        try
+        {
+            availableUsers = await DbContext.Users
+                .Where(u => u.IsActive && !u.IsDeleted)
+                .OrderBy(u => u.Email)
+                .ToListAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading users");
+        }
+    }
+
+    private void ApplyFilter()
+    {
+        var query = allIPs.AsQueryable();
+
+        // Filter by tab type
+        if (activeTab == "office")
+        {
+            query = query.Where(i => i.UserId == null);
+        }
+        else if (activeTab == "individual")
+        {
+            query = query.Where(i => i.UserId != null);
+        }
+
+        if (!showInactiveIPs)
+        {
+            query = query.Where(i => i.IsActive);
+        }
+
+        if (!showExpiredIPs)
+        {
+            var now = DateTime.UtcNow;
+            query = query.Where(i => i.ExpiryDate == null || i.ExpiryDate > now);
+        }
+
+        if (!string.IsNullOrWhiteSpace(searchText))
+        {
+            query = SearchField switch
+            {
+                "IPAddress" => query.Where(i => i.IPAddress.Contains(searchText, StringComparison.OrdinalIgnoreCase)),
+                "Label" => query.Where(i => i.Label != null && i.Label.Contains(searchText, StringComparison.OrdinalIgnoreCase)),
+                "User" => query.Where(i => i.User != null && i.User.Email != null && i.User.Email.Contains(searchText, StringComparison.OrdinalIgnoreCase)),
+                _ => query
+            };
+        }
+
+        filteredIPs = query.ToList();
+    }
+
+    private void OnSearchInput(ChangeEventArgs e)
+    {
+        searchText = e.Value?.ToString() ?? string.Empty;
+        ApplyFilter();
+        StateHasChanged();
+    }
+
+
+    private void ClearSearch()
+    {
+        searchText = string.Empty;
+        ApplyFilter();
+        StateHasChanged();
+    }
+
+    private void SetActiveTab(string tab)
+    {
+        activeTab = tab;
+        ApplyFilter();
+        StateHasChanged();
+    }
+
+
+    private void ShowAddModal()
+    {
+        addErrorMessage = null; // Clear any previous error messages
+        ipFormModel = new IPFormModel
+        {
+            IPAddress = string.Empty,
+            Label = string.Empty,
+            UserId = null,
+            ExpiryDate = null,
+            IsActive = true
+        };
+        showAddModal = true;
+        StateHasChanged();
+    }
+
+    private void CloseAddModal()
+    {
+        showAddModal = false;
+        ipFormModel = new IPFormModel();
+        StateHasChanged();
+    }
+
+    private async Task ViewIP(int ipId)
+    {
+        try
+        {
+            selectedIP = await DbContext.IPSafeListings
+                .Include(i => i.User)
+                .FirstOrDefaultAsync(i => i.Id == ipId);
+            
+            if (selectedIP != null)
+            {
+                showViewModal = true;
+                StateHasChanged();
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading IP for view");
+        }
+    }
+
+    private void CloseViewModal()
+    {
+        showViewModal = false;
+        selectedIP = null;
+        StateHasChanged();
+    }
+
+    private async Task EditIP(int ipId)
+    {
+        try
+        {
+            editErrorMessage = null; // Clear any previous error messages
+            selectedIP = await DbContext.IPSafeListings
+                .Include(i => i.User)
+                .FirstOrDefaultAsync(i => i.Id == ipId);
+            
+            if (selectedIP != null)
+            {
+                // Populate the edit form model with current values
+                editIPFormModel = new EditIPFormModel
+                {
+                    IPAddress = selectedIP.IPAddress,
+                    Label = selectedIP.Label,
+                    UserId = selectedIP.UserId,
+                    ExpiryDate = selectedIP.ExpiryDate,
+                    IsActive = selectedIP.IsActive
+                };
+                
+                showEditModal = true;
+                StateHasChanged();
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading IP for edit");
+        }
+    }
+
+    private void CloseEditModal()
+    {
+        showEditModal = false;
+        selectedIP = null;
+        editIPFormModel = new EditIPFormModel();
+        StateHasChanged();
+    }
+
+    private void OnInvalidSubmit(EditContext editContext)
+    {
+        Logger.LogWarning("Form validation failed");
+        StateHasChanged();
+    }
+
+    private async Task CreateIP()
+    {
+        try
+        {
+            // Validate IP address format
+            if (!IsValidIPAddress(ipFormModel.IPAddress))
+            {
+                Logger.LogError("Invalid IP address format: {IPAddress}", ipFormModel.IPAddress);
+                return;
+            }
+
+            // Note: Type is automatically determined by UserId assignment
+            // UserId = null = Office IP, UserId = assigned = Individual IP
+
+            // Validate UserId exists if provided
+            if (!string.IsNullOrEmpty(ipFormModel.UserId))
+            {
+                var userExists = await DbContext.Users.AnyAsync(u => u.Id == ipFormModel.UserId);
+                if (!userExists)
+                {
+                    addErrorMessage = "Selected user does not exist. Please select a valid user.";
+                    Logger.LogError("User with ID {UserId} does not exist", ipFormModel.UserId);
+                    StateHasChanged();
+                    return;
+                }
+            }
+
+            var newIP = new IPSafeListing
+            {
+                IPAddress = ipFormModel.IPAddress,
+                Label = ipFormModel.Label,
+                UserId = ipFormModel.UserId, // Direct assignment - null for Office, assigned for Individual
+                ExpiryDate = ipFormModel.ExpiryDate,
+                IsActive = ipFormModel.IsActive,
+                CreatedAt = DateTime.UtcNow,
+                CreatedByUserId = "system"
+            };
+
+            DbContext.IPSafeListings.Add(newIP);
+            await DbContext.SaveChangesAsync();
+
+            await LoadIPs();
+            CloseAddModal();
+            StateHasChanged();
+
+            Logger.LogInformation("IP {IPAddress} created successfully", ipFormModel.IPAddress);
+        }
+        catch (Exception ex)
+        {
+            addErrorMessage = "An error occurred while creating the IP. Please try again.";
+            Logger.LogError(ex, "Error creating IP");
+            StateHasChanged();
+        }
+    }
+
+    private async Task UpdateIP()
+    {
+        try
+        {
+            Logger.LogInformation("UpdateIP method called");
+            
+            if (selectedIP == null) 
+            {
+                Logger.LogWarning("selectedIP is null, cannot update");
+                return;
+            }
+
+            // Manual validation
+            if (string.IsNullOrWhiteSpace(editIPFormModel.IPAddress))
+            {
+                Logger.LogError("IP Address is required");
+                return;
+            }
+
+            Logger.LogInformation("Updating IP: {IPAddress}", editIPFormModel.IPAddress);
+
+            // Validate IP address format
+            if (!IsValidIPAddress(editIPFormModel.IPAddress))
+            {
+                Logger.LogError("Invalid IP address format: {IPAddress}", editIPFormModel.IPAddress);
+                return;
+            }
+
+            // Note: Type is automatically determined by UserId assignment
+            // UserId = null = Office IP, UserId = assigned = Individual IP
+
+            // Validate UserId exists if provided
+            if (!string.IsNullOrEmpty(editIPFormModel.UserId))
+            {
+                var userExists = await DbContext.Users.AnyAsync(u => u.Id == editIPFormModel.UserId);
+                if (!userExists)
+                {
+                    editErrorMessage = "Selected user does not exist. Please select a valid user.";
+                    Logger.LogError("User with ID {UserId} does not exist", editIPFormModel.UserId);
+                    StateHasChanged();
+                    return;
+                }
+            }
+
+            // Copy form model values to selectedIP
+            selectedIP.IPAddress = editIPFormModel.IPAddress;
+            selectedIP.Label = editIPFormModel.Label;
+            selectedIP.UserId = editIPFormModel.UserId; // Direct assignment - null for Office, assigned for Individual
+            selectedIP.ExpiryDate = editIPFormModel.ExpiryDate;
+            selectedIP.IsActive = editIPFormModel.IsActive;
+            selectedIP.ModifiedAt = DateTime.UtcNow;
+            selectedIP.ModifiedByUserId = "system";
+
+            await DbContext.SaveChangesAsync();
+
+            var updatedIPAddress = selectedIP.IPAddress; // Capture before closing modal
+            await LoadIPs();
+            CloseEditModal();
+            StateHasChanged();
+
+            Logger.LogInformation("IP {IPAddress} updated successfully", updatedIPAddress);
+        }
+        catch (Exception ex)
+        {
+            editErrorMessage = "An error occurred while updating the IP. Please try again.";
+            Logger.LogError(ex, "Error updating IP");
+            StateHasChanged();
+        }
+    }
+
+    private async Task DeleteIP(int ipId)
+    {
+        try
+        {
+            var ip = await DbContext.IPSafeListings.FindAsync(ipId);
+            if (ip != null)
+            {
+                DbContext.IPSafeListings.Remove(ip);
+                await DbContext.SaveChangesAsync();
+
+                await LoadIPs();
+                StateHasChanged();
+
+                Logger.LogInformation("IP {IPAddress} deleted successfully", ip.IPAddress);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error deleting IP");
+        }
+    }
+
+    private async Task ShowConfirmationModal(int ipId, string action)
+    {
+        try
+        {
+            selectedIP = await DbContext.IPSafeListings
+                .Include(i => i.User)
+                .FirstOrDefaultAsync(i => i.Id == ipId);
+            
+            if (selectedIP != null)
+            {
+                confirmationAction = action;
+                showConfirmationModal = true;
+                StateHasChanged();
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading IP for confirmation");
+        }
+    }
+
+    private void CloseConfirmationModal()
+    {
+        showConfirmationModal = false;
+        confirmationAction = string.Empty;
+        selectedIP = null;
+        StateHasChanged();
+    }
+
+    private async Task ConfirmToggleIPStatus()
+    {
+        if (selectedIP != null)
+        {
+            await ToggleIPStatus(selectedIP.Id);
+            CloseConfirmationModal();
+        }
+    }
+
+    private async Task ConfirmDeleteIP()
+    {
+        if (selectedIP != null)
+        {
+            await DeleteIP(selectedIP.Id);
+            CloseConfirmationModal();
+        }
+    }
+
+    private async Task ToggleIPStatus(int ipId)
+    {
+        try
+        {
+            var ip = await DbContext.IPSafeListings.FindAsync(ipId);
+            if (ip != null)
+            {
+                ip.IsActive = !ip.IsActive;
+                ip.ModifiedAt = DateTime.UtcNow;
+                ip.ModifiedByUserId = "system";
+                
+                await DbContext.SaveChangesAsync();
+
+                await LoadIPs();
+                StateHasChanged();
+
+                var status = ip.IsActive ? "activated" : "deactivated";
+                Logger.LogInformation("IP {IPAddress} {Status} successfully", ip.IPAddress, status);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error toggling IP status");
+        }
+    }
+
+    private bool IsValidIPAddress(string ipAddress)
+    {
+        if (string.IsNullOrWhiteSpace(ipAddress))
+            return false;
+
+        // Check if it's a CIDR notation (e.g., 192.168.1.0/24)
+        if (ipAddress.Contains('/'))
+        {
+            var parts = ipAddress.Split('/');
+            if (parts.Length != 2) return false;
+            
+            if (!IPAddress.TryParse(parts[0], out _)) return false;
+            if (!int.TryParse(parts[1], out int prefixLength)) return false;
+            if (prefixLength < 0 || prefixLength > 32) return false;
+            
+            return true;
+        }
+
+        // Check if it's a regular IP address
+        return IPAddress.TryParse(ipAddress, out _);
+    }
+}

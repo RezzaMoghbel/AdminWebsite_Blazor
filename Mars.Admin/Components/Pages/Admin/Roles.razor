@@ -1,0 +1,1242 @@
+@page "/admin/roles"
+@using Mars.Admin.Data
+@using Mars.Admin.Services
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.EntityFrameworkCore
+@using System.ComponentModel.DataAnnotations
+@inject ApplicationDbContext DbContext
+@inject IUserScope UserScope
+@inject ILogger<Roles> Logger
+@attribute [Authorize(Policy = "Role.Read")]
+
+@rendermode InteractiveServer
+
+<PageTitle>Role Management</PageTitle>
+
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <h2><i class="bi bi-people"></i> Role Management</h2>
+            <p class="text-muted">Manage user roles and their permissions</p>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">Roles</h5>
+                    @if (UserScope.HasPermission("Role.Create"))
+                    {
+                        <button class="btn btn-primary" @onclick="ShowCreateModal">
+                            <i class="bi bi-plus-lg"></i> Add Role
+                        </button>
+                    }
+                </div>
+                <div class="card-body">
+                    <!-- Search Controls -->
+                    <div class="row mb-3">
+                        <div class="col-md-4">
+                            <div class="input-group">
+                                <span class="input-group-text">
+                                    <i class="bi bi-search"></i>
+                                </span>
+                                <input type="text"
+                                       class="form-control"
+                                       placeholder="Search roles..."
+                                       value="@searchText"
+                                       @oninput="OnSearchInput" />
+                                <button class="btn btn-outline-secondary" @onclick="ClearSearch" type="button">
+                                    <i class="bi bi-x-lg"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <select class="form-select" @bind="SearchField">
+                                <option value="Name">Name</option>
+                                <option value="Description">Description</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="d-flex align-items-center">
+                                <input class="form-check-input" type="checkbox" id="showInactive"
+                                       @bind="ShowInactiveRoles"
+                                       style="transform: scale(1.5); margin-top: 0;">
+                                <span class="fw-medium ms-3">Show Inactive</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    @if (isLoading)
+                    {
+                        <div class="text-center">
+                            <div class="spinner-border" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="table-responsive">
+                            <table class="table table-striped table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Name</th>
+                                        <th>Description</th>
+                                        <th>Super Admin</th>
+                                        <th>Active</th>
+                                        <th>Users</th>
+                                        <th>Created</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var role in filteredRoles)
+                                    {
+                                        var hasUsers = role.Users.Any();
+                                        <tr class="@(role.IsActive ? "" : "table-secondary opacity-75")">
+                                            <td>
+                                                <strong>@role.Name</strong>
+                                                @if (hasUsers)
+                                                {
+                                                    <span class="badge bg-info ms-2" title="Has @role.Users.Count assigned user(s)">Protected</span>
+                                                }
+                                            </td>
+                                            <td>@role.Description</td>
+                                            <td>
+                                                @if (role.IsSuperAdmin)
+                                                {
+                                                    <span class="badge bg-danger">Yes</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="badge bg-secondary">No</span>
+                                                }
+                                            </td>
+                                            <td>
+                                                @if (role.IsActive)
+                                                {
+                                                    <span class="badge bg-success">Active</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="badge bg-secondary">Inactive</span>
+                                                }
+                                            </td>
+                                            <td>
+                                                <span class="badge bg-info">@role.Users.Count</span>
+                                            </td>
+                                            <td>@role.CreatedAt.ToString("yyyy-MM-dd")</td>
+                                            <td>
+                                                <div class="btn-group" role="group">
+                                                    <button class="btn btn-sm btn-outline-primary" @onclick="() => ViewRole(role.Id)" title="View Details">
+                                                        <i class="bi bi-eye"></i>
+                                                    </button>
+                                                    @if (UserScope.HasPermission("Role.Update"))
+                                                    {
+                                                        <button class="btn btn-sm btn-outline-secondary" @onclick="() => EditRole(role.Id)" title="Edit Role">
+                                                            <i class="bi bi-pencil-square"></i>
+                                                        </button>
+                                                    }
+                                                    @if (UserScope.HasPermission("Role.Update"))
+                                                    {
+                                                        <button class="btn btn-sm btn-outline-info" @onclick="() => ManageRolePermissions(role.Id)" title="Manage Permissions">
+                                                            <i class="bi bi-shield-lock"></i>
+                                                        </button>
+                                                    }
+                                                    @if (UserScope.HasPermission("Role.Update"))
+                                                    {
+                                                        @if (role.IsActive)
+                                                        {
+                                                            @if (role.Users.Any())
+                                                            {
+                                                                <button class="btn btn-sm btn-outline-warning" disabled title="Cannot deactivate role with assigned users">
+                                                                    <i class="bi bi-pause-circle"></i>
+                                                                </button>
+                                                            }
+                                                            else
+                                                            {
+                                                                <button class="btn btn-sm btn-outline-warning" @onclick='() => ShowConfirmationModal(role.Id, "deactivate")' title="Deactivate Role">
+                                                                    <i class="bi bi-pause-circle"></i>
+                                                                </button>
+                                                            }
+                                                        }
+                                                        else
+                                                        {
+                                                            <button class="btn btn-sm btn-outline-success" @onclick='() => ShowConfirmationModal(role.Id, "activate")' title="Activate Role">
+                                                                <i class="bi bi-play-circle"></i>
+                                                            </button>
+                                                        }
+                                                    }
+                                                    @if (UserScope.HasPermission("Role.Delete") && !role.IsSuperAdmin)
+                                                    {
+                                                        @if (role.Users.Any())
+                                                        {
+                                                            <button class="btn btn-sm btn-outline-danger" disabled title="Cannot delete role with assigned users">
+                                                                <i class="bi bi-trash"></i>
+                                                            </button>
+                                                        }
+                                                        else
+                                                        {
+                                                            <button class="btn btn-sm btn-outline-danger" @onclick='() => ShowConfirmationModal(role.Id, "delete")' title="Delete Role">
+                                                            <i class="bi bi-trash"></i>
+                                                        </button>
+                                                        }
+                                                    }
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add Role Modal -->
+@if (showCreateModal)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-plus-lg"></i> Add New Role</h5>
+                    <button type="button" class="btn-close" @onclick="CloseCreateModal"></button>
+                </div>
+                <div class="modal-body">
+                    <EditForm Model="roleFormModel" OnInvalidSubmit="OnInvalidSubmit">
+                        <DataAnnotationsValidator />
+                        <ValidationSummary class="text-danger" />
+                        
+                        @if (!string.IsNullOrEmpty(createErrorMessage))
+                        {
+                            <div class="alert alert-danger">
+                                @createErrorMessage
+                            </div>
+                        }
+
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label">Role Name <span class="text-danger">*</span></label>
+                                    <InputText class="form-control" @bind-Value="roleFormModel.Name" placeholder="Enter role name" />
+                                    <ValidationMessage For="@(() => roleFormModel.Name)" class="text-danger" />
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label">Super Admin</label>
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" @bind="roleFormModel.IsSuperAdmin">
+                                        <label class="form-check-label">Is Super Admin Role</label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Description</label>
+                            <InputTextArea class="form-control" @bind-Value="roleFormModel.Description" rows="3" placeholder="Enter role description" />
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Status</label>
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" @bind="roleFormModel.IsActive">
+                                <label class="form-check-label">Active</label>
+                            </div>
+                        </div>
+                    </EditForm>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseCreateModal">Cancel</button>
+                    <button type="button" class="btn btn-primary" @onclick="CreateRole">
+                        <i class="bi bi-check-lg"></i> Create Role
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- View Role Modal -->
+@if (showViewModal && selectedRole != null)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-eye"></i> Role Details</h5>
+                    <button type="button" class="btn-close" @onclick="CloseViewModal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6>Basic Information</h6>
+                            <table class="table table-sm">
+                                <tr>
+                                    <td><strong>Name:</strong></td>
+                                    <td>@selectedRole.Name</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Description:</strong></td>
+                                    <td>@(selectedRole.Description ?? "No description")</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Super Admin:</strong></td>
+                                    <td>
+                                        @if (selectedRole.IsSuperAdmin)
+                                        {
+                                            <span class="badge bg-danger">Yes</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-secondary">No</span>
+                                        }
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Status:</strong></td>
+                                    <td>
+                                        @if (selectedRole.IsActive)
+                                        {
+                                            <span class="badge bg-success">Active</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-secondary">Inactive</span>
+                                        }
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Created:</strong></td>
+                                    <td>@selectedRole.CreatedAt.ToString("yyyy-MM-dd HH:mm")</td>
+                                </tr>
+                                @if (selectedRole.ModifiedAt.HasValue)
+                                {
+                                    <tr>
+                                        <td><strong>Modified:</strong></td>
+                                        <td>@selectedRole.ModifiedAt.Value.ToString("yyyy-MM-dd HH:mm")</td>
+                                    </tr>
+                                }
+                            </table>
+                        </div>
+                        <div class="col-md-6">
+                            <h6>Users with this Role</h6>
+                            @if (selectedRole.Users?.Any() == true)
+                            {
+                                <div class="list-group">
+                                    @foreach (var user in selectedRole.Users.Where(u => !u.IsDeleted))
+                                    {
+                                        <div class="list-group-item d-flex justify-content-between align-items-center">
+                                            <span>@user.Email</span>
+                                            <span class="badge @(user.IsActive ? "bg-success" : "bg-secondary")">
+                                                @(user.IsActive ? "Active" : "Inactive")
+                                            </span>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                            else
+                            {
+                                <p class="text-muted">No users assigned to this role</p>
+                            }
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseViewModal">Close</button>
+                    @if (UserScope.HasPermission("Role.Update"))
+                    {
+                        <button type="button" class="btn btn-primary" @onclick="async () => { var roleId = selectedRole?.Id; CloseViewModal(); if (roleId.HasValue) await EditRole(roleId.Value); }">
+                            <i class="bi bi-pencil-square"></i> Edit Role
+                        </button>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Edit Role Modal -->
+@if (showEditModal && selectedRole != null)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-pencil-square"></i> Edit Role</h5>
+                    <button type="button" class="btn-close" @onclick="CloseEditModal"></button>
+                </div>
+                <div class="modal-body">
+                    <EditForm Model="editRoleFormModel" OnInvalidSubmit="OnInvalidSubmit">
+                        <DataAnnotationsValidator />
+                        <ValidationSummary class="text-danger" />
+                        
+                        @if (!string.IsNullOrEmpty(editErrorMessage))
+                        {
+                            <div class="alert alert-danger">
+                                @editErrorMessage
+                            </div>
+                        }
+
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label">Role Name <span class="text-danger">*</span></label>
+                                    <InputText class="form-control" @bind-Value="editRoleFormModel.Name" placeholder="Enter role name" />
+                                    <ValidationMessage For="@(() => editRoleFormModel.Name)" class="text-danger" />
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label">Super Admin</label>
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" @bind="editRoleFormModel.IsSuperAdmin">
+                                        <label class="form-check-label">Is Super Admin Role</label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Description</label>
+                            <InputTextArea class="form-control" @bind-Value="editRoleFormModel.Description" rows="3" placeholder="Enter role description" />
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Status</label>
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" @bind="editRoleFormModel.IsActive">
+                                <label class="form-check-label">Active</label>
+                            </div>
+                        </div>
+                    </EditForm>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseEditModal">Cancel</button>
+                    <button type="button" class="btn btn-primary" @onclick="UpdateRole">
+                        <i class="bi bi-check-lg"></i> Update Role
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Confirmation Modal -->
+@if (showConfirmationModal && selectedRole != null)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        @if (confirmationAction == "deactivate")
+                        {
+                            <text><i class="bi bi-exclamation-triangle text-warning"></i> Confirm Deactivation</text>
+                        }
+                        else if (confirmationAction == "activate")
+                        {
+                            <text><i class="bi bi-check-circle text-success"></i> Confirm Activation</text>
+                        }
+                        else if (confirmationAction == "delete")
+                        {
+                            <text>
+                                <i class="bi bi-exclamation-triangle text-danger"></i> Confirm Deletion
+                            </text>
+                        }
+                    </h5>
+                    <button type="button" class="btn-close" @onclick="CloseConfirmationModal"></button>
+                </div>
+                <div class="modal-body">
+                    @if (confirmationAction == "deactivate")
+                    {
+                        <p>You are about to <strong>deactivate</strong> the following role:</p>
+                        <div class="alert alert-warning">
+                            <strong>Name:</strong> @selectedRole.Name<br>
+                            <strong>Description:</strong> @(selectedRole.Description ?? "No description")<br>
+                            <strong>Super Admin:</strong> @(selectedRole.IsSuperAdmin ? "Yes" : "No")<br>
+                            <strong>Users:</strong> @selectedRole?.Users?.Count
+                        </div>
+                        @if (selectedRole?.Users?.Any() == true)
+                        {
+                            <div class="alert alert-danger">
+                                <strong>Warning:</strong> This role has @selectedRole.Users.Count user(s) assigned to it. 
+                                Deactivating this role will prevent these users from accessing the system.
+                            </div>
+                        }
+                        <p class="mb-0">This action will prevent users with this role from accessing the system. The role can be reactivated later if needed.</p>
+                    }
+                    else if (confirmationAction == "activate")
+                    {
+                        <p>You are about to <strong>activate</strong> the following role:</p>
+                        <div class="alert alert-success">
+                            <strong>Name:</strong> @selectedRole.Name<br>
+                            <strong>Description:</strong> @(selectedRole.Description ?? "No description")<br>
+                            <strong>Super Admin:</strong> @(selectedRole.IsSuperAdmin ? "Yes" : "No")<br>
+                            <strong>Users:</strong> @selectedRole?.Users?.Count
+                        </div>
+                        <p class="mb-0">This action will allow users with this role to access the system.</p>
+                    }
+                    else if (confirmationAction == "delete")
+                    {
+                        <p>You are about to <strong>permanently delete</strong> the following role:</p>
+                        <div class="alert alert-danger">
+                            <strong>Name:</strong> @selectedRole.Name<br>
+                            <strong>Description:</strong> @(selectedRole.Description ?? "No description")<br>
+                            <strong>Super Admin:</strong> @(selectedRole.IsSuperAdmin ? "Yes" : "No")<br>
+                            <strong>Users:</strong> @selectedRole?.Users?.Count
+                        </div>
+                        @if (selectedRole?.Users?.Any() == true)
+                        {
+                            <div class="alert alert-danger">
+                                <strong>CRITICAL WARNING:</strong> This role has @selectedRole.Users.Count user(s) assigned to it. 
+                                <strong>This action cannot be performed while users are assigned to this role.</strong>
+                            </div>
+                        }
+                        <p class="mb-0"><strong>Warning:</strong> This action cannot be undone. The role will be permanently removed from the system.</p>
+                    }
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseConfirmationModal">Cancel</button>
+                    @if (confirmationAction == "deactivate")
+                    {
+                        @if (selectedRole?.Users?.Any() == true)
+                        {
+                            <button type="button" class="btn btn-warning" disabled title="Cannot deactivate role with assigned users">
+                                <i class="bi bi-pause-circle"></i> Deactivate Role
+                            </button>
+                        }
+                        else
+                        {
+                            <button type="button" class="btn btn-warning" @onclick="ConfirmToggleRoleActive">
+                                <i class="bi bi-pause-circle"></i> Deactivate Role
+                            </button>
+                        }
+                    }
+                    else if (confirmationAction == "activate")
+                    {
+                        <button type="button" class="btn btn-success" @onclick="ConfirmToggleRoleActive">
+                            <i class="bi bi-play-circle"></i> Activate Role
+                        </button>
+                    }
+                    else if (confirmationAction == "delete")
+                    {
+                        @if (selectedRole?.Users?.Any() == true)
+                        {
+                            <button type="button" class="btn btn-danger" disabled title="Cannot delete role with assigned users">
+                                <i class="bi bi-trash"></i> Delete Role
+                            </button>
+                        }
+                        else
+                        {
+                            <button type="button" class="btn btn-danger" @onclick="ConfirmDeleteRole">
+                                <i class="bi bi-trash"></i> Delete Role
+                            </button>
+                        }
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Permission Management Modal -->
+@if (showPermissionModal && selectedRoleForPermissions != null)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-shield-lock"></i> Manage Permissions - @selectedRoleForPermissions.Name</h5>
+                    <button type="button" class="btn-close" @onclick="ClosePermissionModal"></button>
+                </div>
+                <div class="modal-body">
+                    @if (isLoadingPermissions)
+                    {
+                        <div class="text-center">
+                            <div class="spinner-border" role="status">
+                                <span class="visually-hidden">Loading permissions...</span>
+                            </div>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h6>Available Permissions</h6>
+                                <div class="border rounded p-3" style="max-height: 400px; overflow-y: auto;">
+                                    @if (availablePermissions?.Any() == true)
+                                    {
+                                        @foreach (var permission in availablePermissions)
+                                        {
+                                            <div class="form-check mb-2">
+                                                <input class="form-check-input" 
+                                                       type="checkbox" 
+                                                       id="permission_@permission.Id"
+                                                       @onchange="(e) => TogglePermissionAssignment(permission.Id, (bool)e.Value!)"
+                                                       checked="@IsPermissionAssigned(permission.Id)">
+                                                <label class="form-check-label" for="permission_@permission.Id">
+                                                    <strong>@permission.Name</strong>
+                                                    @if (!string.IsNullOrEmpty(permission.Description))
+                                                    {
+                                                        <br><small class="text-muted">@permission.Description</small>
+                                                    }
+                                                </label>
+                                            </div>
+                                        }
+                                    }
+                                    else
+                                    {
+                                        <p class="text-muted">No permissions available</p>
+                                    }
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <h6>Assigned Permissions</h6>
+                                <div class="border rounded p-3" style="max-height: 400px; overflow-y: auto;">
+                                    @if (rolePermissions?.Any() == true)
+                                    {
+                                        @foreach (var rolePermission in rolePermissions.Where(rp => rp.IsActive))
+                                        {
+                                            <div class="d-flex justify-content-between align-items-center mb-2 p-2 border rounded">
+                                                <div>
+                                                    <strong>@rolePermission.Permission?.Name</strong>
+                                                    @if (!string.IsNullOrEmpty(rolePermission.Permission?.Description))
+                                                    {
+                                                        <br><small class="text-muted">@rolePermission.Permission.Description</small>
+                                                    }
+                                                </div>
+                                                <div class="d-flex align-items-center">
+                                                    <span class="badge @(rolePermission.IsGranted ? "bg-success" : "bg-danger") me-2">
+                                                        @(rolePermission.IsGranted ? "Granted" : "Denied")
+                                                    </span>
+                                                    <button class="btn btn-sm btn-outline-danger" 
+                                                            @onclick="() => RemovePermissionFromRole(rolePermission.PermissionId)" 
+                                                            title="Remove Permission">
+                                                        <i class="bi bi-x"></i>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        }
+                                    }
+                                    else
+                                    {
+                                        <p class="text-muted">No permissions assigned to this role</p>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                        
+                        @if (!string.IsNullOrEmpty(permissionErrorMessage))
+                        {
+                            <div class="alert alert-danger mt-3">
+                                @permissionErrorMessage
+                            </div>
+                        }
+                    }
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="ClosePermissionModal">Close</button>
+                    <button type="button" class="btn btn-primary" @onclick="SaveRolePermissions">
+                        <i class="bi bi-check-lg"></i> Save Changes
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<UserRole> allRoles = new();
+    private List<UserRole> filteredRoles = new();
+    private bool isLoading = true;
+    
+    // Search and filter
+    private string searchText = string.Empty;
+    private string _searchField = "Name";
+    private bool showInactiveRoles = false;
+    
+    // Modal states
+    private bool showCreateModal = false;
+    private bool showViewModal = false;
+    private bool showEditModal = false;
+    private bool showConfirmationModal = false;
+    private bool showPermissionModal = false;
+    private string confirmationAction = string.Empty;
+    private UserRole? selectedRole = null;
+    
+    // Permission management
+    private List<Permission> availablePermissions = new();
+    private List<UserRolePermission> rolePermissions = new();
+    private List<int> pendingPermissionChanges = new();
+    private bool isLoadingPermissions = false;
+    private string? permissionErrorMessage = null;
+    private UserRole? selectedRoleForPermissions = null;
+    
+    // Form models
+    public class RoleFormModel
+    {
+        [Required(ErrorMessage = "Role name is required")]
+        [MaxLength(100, ErrorMessage = "Role name cannot exceed 100 characters")]
+        public string Name { get; set; } = string.Empty;
+
+        [MaxLength(500, ErrorMessage = "Description cannot exceed 500 characters")]
+        public string? Description { get; set; }
+        
+        public bool IsSuperAdmin { get; set; } = false;
+        public bool IsActive { get; set; } = true;
+    }
+
+    public class EditRoleFormModel
+    {
+        [Required(ErrorMessage = "Role name is required")]
+        [MaxLength(100, ErrorMessage = "Role name cannot exceed 100 characters")]
+        public string Name { get; set; } = string.Empty;
+
+        [MaxLength(500, ErrorMessage = "Description cannot exceed 500 characters")]
+        public string? Description { get; set; }
+        
+        public bool IsSuperAdmin { get; set; } = false;
+        public bool IsActive { get; set; } = true;
+    }
+    
+    private RoleFormModel roleFormModel = new();
+    private EditRoleFormModel editRoleFormModel = new();
+    
+    private string? createErrorMessage = null;
+    private string? editErrorMessage = null;
+
+    private string SearchField
+    {
+        get => _searchField;
+        set
+        {
+            _searchField = value;
+            ApplyFilter();
+            StateHasChanged();
+        }
+    }
+
+    private bool ShowInactiveRoles
+    {
+        get => showInactiveRoles;
+        set
+        {
+            showInactiveRoles = value;
+            ApplyFilter();
+            StateHasChanged();
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadRoles();
+    }
+
+    private async Task LoadRoles()
+    {
+        try
+        {
+            isLoading = true;
+            allRoles = await DbContext.UserRoles
+                .Include(r => r.Users)
+                .OrderBy(r => r.Name)
+                .ToListAsync();
+            ApplyFilter();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading roles");
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void ApplyFilter()
+    {
+        var query = allRoles.AsQueryable();
+
+        if (!showInactiveRoles)
+        {
+            query = query.Where(r => r.IsActive);
+        }
+
+        if (!string.IsNullOrWhiteSpace(searchText))
+        {
+            query = SearchField switch
+            {
+                "Name" => query.Where(r => r.Name.Contains(searchText, StringComparison.OrdinalIgnoreCase)),
+                "Description" => query.Where(r => r.Description != null && r.Description.Contains(searchText, StringComparison.OrdinalIgnoreCase)),
+                _ => query
+            };
+        }
+
+        filteredRoles = query.ToList();
+    }
+
+    private void OnSearchInput(ChangeEventArgs e)
+    {
+        searchText = e.Value?.ToString() ?? string.Empty;
+        ApplyFilter();
+        StateHasChanged();
+    }
+
+    private void ClearSearch()
+    {
+        searchText = string.Empty;
+        ApplyFilter();
+        StateHasChanged();
+    }
+
+    private void ShowCreateModal()
+    {
+        createErrorMessage = null;
+        roleFormModel = new RoleFormModel
+        {
+            Name = string.Empty,
+            Description = string.Empty,
+            IsSuperAdmin = false,
+            IsActive = true
+        };
+        showCreateModal = true;
+        StateHasChanged();
+    }
+
+    private void CloseCreateModal()
+    {
+        showCreateModal = false;
+        roleFormModel = new RoleFormModel();
+        StateHasChanged();
+    }
+
+    private async Task ViewRole(int roleId)
+    {
+        try
+        {
+            selectedRole = await DbContext.UserRoles
+                .Include(r => r.Users)
+                .FirstOrDefaultAsync(r => r.Id == roleId);
+            
+            if (selectedRole != null)
+            {
+                showViewModal = true;
+                StateHasChanged();
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading role for view");
+        }
+    }
+
+    private void CloseViewModal()
+    {
+        showViewModal = false;
+        selectedRole = null;
+        StateHasChanged();
+    }
+
+    private async Task EditRole(int roleId)
+    {
+        try
+        {
+            editErrorMessage = null;
+            selectedRole = await DbContext.UserRoles
+                .Include(r => r.Users)
+                .FirstOrDefaultAsync(r => r.Id == roleId);
+            
+            if (selectedRole != null)
+            {
+                editRoleFormModel = new EditRoleFormModel
+                {
+                    Name = selectedRole.Name,
+                    Description = selectedRole.Description,
+                    IsSuperAdmin = selectedRole.IsSuperAdmin,
+                    IsActive = selectedRole.IsActive
+                };
+                
+                showEditModal = true;
+                StateHasChanged();
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading role for edit");
+        }
+    }
+
+    private void CloseEditModal()
+    {
+        showEditModal = false;
+        selectedRole = null;
+        editRoleFormModel = new EditRoleFormModel();
+        StateHasChanged();
+    }
+
+    private void OnInvalidSubmit(EditContext editContext)
+    {
+        Logger.LogWarning("Form validation failed");
+        StateHasChanged();
+    }
+
+    private async Task CreateRole()
+    {
+        try
+        {
+            // Clear any previous error messages
+            createErrorMessage = null;
+
+            // Check if role name already exists
+            var existingRole = await DbContext.UserRoles
+                .FirstOrDefaultAsync(r => r.Name.ToLower() == roleFormModel.Name.ToLower());
+            
+            if (existingRole != null)
+            {
+                createErrorMessage = "A role with this name already exists.";
+                StateHasChanged();
+                return;
+            }
+
+            var newRole = new UserRole
+            {
+                Name = roleFormModel.Name,
+                Description = roleFormModel.Description,
+                IsSuperAdmin = roleFormModel.IsSuperAdmin,
+                IsActive = roleFormModel.IsActive,
+                CreatedAt = DateTime.UtcNow,
+                CreatedByUserId = UserScope.UserId
+            };
+
+            DbContext.UserRoles.Add(newRole);
+            await DbContext.SaveChangesAsync();
+
+            await LoadRoles();
+            CloseCreateModal();
+            StateHasChanged();
+
+            Logger.LogInformation("Role {RoleName} created successfully", newRole.Name);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error creating role");
+            createErrorMessage = "An error occurred while creating the role. Please try again.";
+            StateHasChanged();
+        }
+    }
+
+    private async Task UpdateRole()
+    {
+        try
+        {
+            if (selectedRole == null) return;
+
+            // Clear any previous error messages
+            editErrorMessage = null;
+
+            // Store the role name for logging before any changes
+            var roleName = selectedRole.Name;
+
+            // Check if role name already exists (excluding current role)
+            var existingRole = await DbContext.UserRoles
+                .FirstOrDefaultAsync(r => r.Name.ToLower() == editRoleFormModel.Name.ToLower() && r.Id != selectedRole.Id);
+            
+            if (existingRole != null)
+            {
+                editErrorMessage = "A role with this name already exists.";
+                StateHasChanged();
+                return;
+            }
+
+            selectedRole.Name = editRoleFormModel.Name;
+            selectedRole.Description = editRoleFormModel.Description;
+            selectedRole.IsSuperAdmin = editRoleFormModel.IsSuperAdmin;
+            selectedRole.IsActive = editRoleFormModel.IsActive;
+            selectedRole.ModifiedAt = DateTime.UtcNow;
+            selectedRole.ModifiedByUserId = UserScope.UserId;
+
+            await DbContext.SaveChangesAsync();
+
+            await LoadRoles();
+            CloseEditModal();
+            StateHasChanged();
+
+            Logger.LogInformation("Role {RoleName} updated successfully", roleName);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error updating role");
+            editErrorMessage = "An error occurred while updating the role. Please try again.";
+            StateHasChanged();
+        }
+    }
+
+    private async Task ShowConfirmationModal(int roleId, string action)
+    {
+        try
+        {
+            selectedRole = await DbContext.UserRoles
+                .Include(r => r.Users)
+                .FirstOrDefaultAsync(r => r.Id == roleId);
+            
+            if (selectedRole != null)
+            {
+                confirmationAction = action;
+                showConfirmationModal = true;
+                StateHasChanged();
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading role for confirmation");
+        }
+    }
+
+    private void CloseConfirmationModal()
+    {
+        showConfirmationModal = false;
+        confirmationAction = string.Empty;
+        selectedRole = null;
+        StateHasChanged();
+    }
+
+    private async Task ConfirmToggleRoleActive()
+    {
+        if (selectedRole != null)
+        {
+            await ToggleRoleActive(selectedRole.Id);
+            CloseConfirmationModal();
+        }
+    }
+
+    private async Task ConfirmDeleteRole()
+    {
+        if (selectedRole != null)
+        {
+            await DeleteRole(selectedRole.Id);
+            CloseConfirmationModal();
+        }
+    }
+
+    private async Task ToggleRoleActive(int roleId)
+    {
+        try
+        {
+            var role = await DbContext.UserRoles
+                .Include(r => r.Users)
+                .FirstOrDefaultAsync(r => r.Id == roleId);
+            
+            if (role != null)
+            {
+                // Prevent deactivation if users are assigned
+                if (!role.IsActive && role.Users.Any())
+                {
+                    Logger.LogWarning("Cannot deactivate role {RoleName} because it has {UserCount} users assigned", role.Name, role.Users.Count);
+                    return;
+                }
+
+                role.IsActive = !role.IsActive;
+                role.ModifiedAt = DateTime.UtcNow;
+                role.ModifiedByUserId = UserScope.UserId;
+                
+                await DbContext.SaveChangesAsync();
+
+                await LoadRoles();
+                StateHasChanged();
+
+                var status = role.IsActive ? "activated" : "deactivated";
+                Logger.LogInformation("Role {RoleName} {Status} successfully", role.Name, status);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error toggling role active status");
+        }
+    }
+
+    private async Task DeleteRole(int roleId)
+    {
+        try
+        {
+            var role = await DbContext.UserRoles
+                .Include(r => r.Users)
+                .FirstOrDefaultAsync(r => r.Id == roleId);
+            
+            if (role != null)
+            {
+                // Check if role has users assigned
+                if (role.Users.Any())
+                {
+                    Logger.LogWarning("Cannot delete role {RoleName} because it has {UserCount} users assigned", role.Name, role.Users.Count);
+                    return;
+                }
+
+                DbContext.UserRoles.Remove(role);
+                await DbContext.SaveChangesAsync();
+
+                await LoadRoles();
+                StateHasChanged();
+
+                Logger.LogInformation("Role {RoleName} deleted successfully", role.Name);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error deleting role");
+        }
+    }
+
+    // Permission Management Methods
+    private async Task ManageRolePermissions(int roleId)
+    {
+        try
+        {
+            isLoadingPermissions = true;
+            permissionErrorMessage = null;
+            pendingPermissionChanges.Clear();
+            
+            // Load the selected role with its permissions
+            selectedRoleForPermissions = await DbContext.UserRoles
+                .Include(r => r.UserRolePermissions)
+                    .ThenInclude(urp => urp.Permission)
+                .FirstOrDefaultAsync(r => r.Id == roleId);
+            
+            if (selectedRoleForPermissions != null)
+            {
+                // Load all available permissions
+                availablePermissions = await DbContext.Permissions
+                    .Where(p => p.IsActive)
+                    .OrderBy(p => p.Name)
+                    .ToListAsync();
+                
+                // Get current role permissions
+                rolePermissions = selectedRoleForPermissions.UserRolePermissions.ToList();
+                
+                showPermissionModal = true;
+                StateHasChanged();
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading role permissions");
+            permissionErrorMessage = "An error occurred while loading permissions. Please try again.";
+        }
+        finally
+        {
+            isLoadingPermissions = false;
+        }
+    }
+
+    private void ClosePermissionModal()
+    {
+        showPermissionModal = false;
+        selectedRoleForPermissions = null;
+        availablePermissions.Clear();
+        rolePermissions.Clear();
+        pendingPermissionChanges.Clear();
+        permissionErrorMessage = null;
+        StateHasChanged();
+    }
+
+    private bool IsPermissionAssigned(int permissionId)
+    {
+        return rolePermissions.Any(rp => rp.PermissionId == permissionId && rp.IsActive);
+    }
+
+    private void TogglePermissionAssignment(int permissionId, bool isAssigned)
+    {
+        if (isAssigned)
+        {
+            // Add to pending changes if not already assigned
+            if (!IsPermissionAssigned(permissionId) && !pendingPermissionChanges.Contains(permissionId))
+            {
+                pendingPermissionChanges.Add(permissionId);
+            }
+        }
+        else
+        {
+            // Remove from pending changes if it was added
+            pendingPermissionChanges.Remove(permissionId);
+        }
+        StateHasChanged();
+    }
+
+    private void RemovePermissionFromRole(int permissionId)
+    {
+        var rolePermission = rolePermissions.FirstOrDefault(rp => rp.PermissionId == permissionId);
+        if (rolePermission != null)
+        {
+            rolePermission.IsActive = false;
+            rolePermission.ModifiedAt = DateTime.UtcNow;
+            rolePermission.ModifiedByUserId = UserScope.UserId;
+        }
+        StateHasChanged();
+    }
+
+    private async Task SaveRolePermissions()
+    {
+        try
+        {
+            permissionErrorMessage = null;
+            
+            if (selectedRoleForPermissions == null) return;
+
+            // Add new permissions
+            foreach (var permissionId in pendingPermissionChanges)
+            {
+                var existingRolePermission = rolePermissions.FirstOrDefault(rp => rp.PermissionId == permissionId);
+                
+                if (existingRolePermission != null)
+                {
+                    // Reactivate existing permission
+                    existingRolePermission.IsActive = true;
+                    existingRolePermission.IsGranted = true;
+                    existingRolePermission.ModifiedAt = DateTime.UtcNow;
+                    existingRolePermission.ModifiedByUserId = UserScope.UserId;
+                }
+                else
+                {
+                    // Create new role permission
+                    var newRolePermission = new UserRolePermission
+                    {
+                        UserRoleId = selectedRoleForPermissions.Id,
+                        PermissionId = permissionId,
+                        IsGranted = true,
+                        IsActive = true,
+                        CreatedAt = DateTime.UtcNow,
+                        CreatedByUserId = UserScope.UserId
+                    };
+                    
+                    DbContext.UserRolePermissions.Add(newRolePermission);
+                    rolePermissions.Add(newRolePermission);
+                }
+            }
+
+            await DbContext.SaveChangesAsync();
+            
+            // Store the role name for logging before closing the modal
+            var roleName = selectedRoleForPermissions.Name;
+            
+            // Reload roles to refresh the data
+            await LoadRoles();
+            
+            ClosePermissionModal();
+            StateHasChanged();
+
+            Logger.LogInformation("Permissions updated for role {RoleName}", roleName);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error saving role permissions");
+            permissionErrorMessage = "An error occurred while saving permissions. Please try again.";
+            StateHasChanged();
+        }
+    }
+}

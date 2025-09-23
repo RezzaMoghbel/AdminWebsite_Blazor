@@ -1,0 +1,897 @@
+@page "/admin/users"
+@using Mars.Admin.Data
+@using Mars.Admin.Services
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.AspNetCore.Identity
+@using System.ComponentModel.DataAnnotations
+@inject ApplicationDbContext DbContext
+@inject IUserScope UserScope
+@inject ILogger<Users> Logger
+@inject UserManager<ApplicationUser> UserManager
+@attribute [Authorize(Policy = "User.Read")]
+
+@rendermode InteractiveServer
+
+<PageTitle>User Management</PageTitle>
+
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <h2>User Management</h2>
+            <p class="text-muted">Manage users and their role assignments</p>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">Users</h5>
+                </div>
+                <div class="card-body">
+                    <!-- Search Controls -->
+                    <div class="row mb-3">
+                        <div class="col-md-3">
+                            <div class="input-group">
+                                <span class="input-group-text">
+                                    <i class="bi bi-search"></i>
+                                </span>
+                                <input type="text"
+                                       class="form-control"
+                                       placeholder="Search users..."
+                                       value="@searchText"
+                                       @oninput="OnSearchInput" />
+                            </div>
+                        </div>
+                        <div class="col-md-2">
+                            <select class="form-select" @bind="SearchField">
+                                <option value="Email">Email</option>
+                                <option value="Role">Role</option>
+                                <option value="EmailConfirmed">Email Status</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <button class="btn btn-outline-secondary" @onclick="ClearSearch">
+                                <i class="bi bi-x-lg"></i> Clear
+                            </button>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="d-flex align-items-center">
+                                <input class="form-check-input" type="checkbox" id="showDeleted"
+                                       @bind="showDeletedUsers" @bind:after="OnShowDeletedChanged"
+                                       style="transform: scale(1.5); margin-top: 0;">
+                                <span class="fw-medium ms-3">Show Deleted</span>
+                            </div>
+                        </div>
+
+
+                        <div class="col-md-2">
+                            <small class="text-muted">
+                                Showing @filteredUsers?.Count of @allUsers?.Count users
+                            </small>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body">
+                    @if (allUsers == null)
+                    {
+                        <div class="text-center">
+                            <div class="spinner-border" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="table-responsive">
+                            <table class="table table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>Email</th>
+                                        <th>Role</th>
+                                        <th>Email Confirmed</th>
+                                        <th>Active</th>
+                                        <th>Deleted</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @if (filteredUsers?.Any() == true)
+                                    {
+                                        @foreach (var user in filteredUsers)
+                                        {
+                                            <tr>
+                                                <td>
+                                                    <strong>@user.Email</strong>
+                                                </td>
+                                                <td>
+                                                    @if (user.UserRole != null)
+                                                    {
+                                                        <span class="badge bg-primary">@user.UserRole.Name</span>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="badge bg-secondary">No Role</span>
+                                                    }
+                                                </td>
+                                                <td>
+                                                    @if (user.EmailConfirmed)
+                                                    {
+                                                        <span class="badge bg-success">Confirmed</span>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="badge bg-warning">Pending</span>
+                                                    }
+                                                </td>
+                                                <td>
+                                                    @if (user.IsActive)
+                                                    {
+                                                        <span class="badge bg-success">Active</span>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="badge bg-secondary">Inactive</span>
+                                                    }
+                                                </td>
+                                                <td>
+                                                    @if (user.IsDeleted)
+                                                    {
+                                                        <span class="badge bg-danger">Yes</span>
+                                                        @if (user.DeletedAt.HasValue)
+                                                        {
+                                                            <br>
+
+                                                            <small class="text-muted">@user.DeletedAt.Value.ToString("yyyy-MM-dd")</small>
+                                                        }
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="badge bg-success">No</span>
+                                                    }
+                                                </td>
+                                                <td>
+                                                    <div class="btn-group" role="group">
+                                                        <button class="btn btn-sm btn-outline-primary" @onclick="() => ViewUser(user.Id)" title="View User">
+                                                            <i class="bi bi-eye"></i>
+                                                        </button>
+                                                        @if (UserScope.HasPermission("User.Update"))
+                                                        {
+                                                            <button class="btn btn-sm btn-outline-secondary" @onclick="() => EditUser(user.Id)" title="Edit User">
+                                                                <i class="bi bi-pencil-square"></i>
+                                                            </button>
+                                                        }
+                                                        @if (UserScope.HasPermission("User.Update") && !user.IsDeleted)
+                                                        {
+                                                            @if (user.IsActive)
+                                                            {
+                                                                <button class="btn btn-sm btn-outline-warning" @onclick='() => ShowConfirmationModal(user.Id, "deactivate")' title="Deactivate User">
+                                                                    <i class="bi bi-pause-circle"></i>
+                                                                </button>
+                                                            }
+                                                            else
+                                                            {
+                                                                <button class="btn btn-sm btn-outline-success" @onclick='() => ShowConfirmationModal(user.Id, "activate")' title="Activate User">
+                                                                    <i class="bi bi-play-circle"></i>
+                                                                </button>
+                                                            }
+                                                        }
+                                                        @if (UserScope.HasPermission("User.Delete") && !user.IsDeleted)
+                                                        {
+                                                            <button class="btn btn-sm btn-outline-danger" @onclick='() => ShowConfirmationModal(user.Id, "delete")' title="Soft Delete User">
+                                                                <i class="bi bi-trash"></i>
+                                                            </button>
+                                                        }
+                                                        @if (UserScope.HasPermission("User.Delete") && user.IsDeleted)
+                                                        {
+                                                            <button class="btn btn-sm btn-outline-success" @onclick='() => ShowConfirmationModal(user.Id, "restore")' title="Restore User">
+                                                                <i class="bi bi-arrow-clockwise"></i>
+                                                            </button>
+                                                        }
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        }
+                                    }
+                                    else
+                                    {
+                                        <tr>
+                                            <td colspan="6" class="text-center text-muted">
+                                                <i class="bi bi-search"></i> No users found matching your search criteria
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<!-- View User Modal -->
+@if (showViewModal && selectedUser != null)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">User Details</h5>
+                    <button type="button" class="btn-close" @onclick="CloseViewModal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6>Basic Information</h6>
+                            <table class="table table-sm">
+                                <tr>
+                                    <td><strong>Email:</strong></td>
+                                    <td>@selectedUser.Email</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Role:</strong></td>
+                                    <td>
+                                        @if (selectedUser.UserRole != null)
+                                        {
+                                            <span class="badge bg-primary">@selectedUser.UserRole.Name</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-secondary">No Role</span>
+                                        }
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Email Confirmed:</strong></td>
+                                    <td>
+                                        @if (selectedUser.EmailConfirmed)
+                                        {
+                                            <span class="badge bg-success">Confirmed</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-warning">Pending</span>
+                                        }
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Active Status:</strong></td>
+                                    <td>
+                                        @if (selectedUser.IsActive)
+                                        {
+                                            <span class="badge bg-success">Active</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-secondary">Inactive</span>
+                                        }
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Deleted Status:</strong></td>
+                                    <td>
+                                        @if (selectedUser.IsDeleted)
+                                        {
+                                            <span class="badge bg-danger">Yes</span>
+                                            @if (selectedUser.DeletedAt.HasValue)
+                                            {
+                                                <br><small class="text-muted">@selectedUser.DeletedAt.Value.ToString("yyyy-MM-dd HH:mm")</small>
+                                            }
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-success">No</span>
+                                        }
+                                    </td>
+                                </tr>
+                            </table>
+                        </div>
+                        <div class="col-md-6">
+                            <h6>Website Access</h6>
+                            @if (selectedUser.UserWebsiteAccesses?.Any() == true)
+                            {
+                                <div class="list-group">
+                                    @foreach (var access in selectedUser.UserWebsiteAccesses.Where(ua => ua.IsGranted && ua.IsActive))
+                                    {
+                                        <div class="list-group-item d-flex justify-content-between align-items-center">
+                                            <span>@access.Website?.Name</span>
+                                            <span class="badge bg-primary">@access.Website?.Code</span>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                            else
+                            {
+                                <p class="text-muted">No website access granted</p>
+                            }
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseViewModal">Close</button>
+                    @if (UserScope.HasPermission("User.Update"))
+                    {
+                        <button type="button" class="btn btn-primary" @onclick="async () => { var userId = selectedUser?.Id; CloseViewModal(); if (userId != null) await EditUser(userId); }">
+                            <i class="bi bi-pencil-square"></i> Edit User
+                        </button>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Edit User Modal -->
+@if (showEditModal && selectedUser != null)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Edit User</h5>
+                    <button type="button" class="btn-close" @onclick="CloseEditModal"></button>
+                </div>
+                <div class="modal-body">
+                    <EditForm Model="@selectedUser" OnValidSubmit="UpdateUser" autocomplete="off">
+                        <DataAnnotationsValidator />
+                        <ValidationSummary class="text-danger mb-3" />
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Email Address</label>
+                                <InputText @bind-Value="selectedUser.Email" class="form-control" readonly autocomplete="off" data-lpignore="true" />
+                                <small class="text-muted">Email cannot be changed after user creation</small>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Role *</label>
+                                <InputSelect @bind-Value="selectedUser.UserRoleId" class="form-select" autocomplete="off" data-lpignore="true">
+                                    <option value="">Select a role</option>
+                                    @foreach (var role in availableRoles)
+                                    {
+                                        <option value="@role.Id">@role.Name</option>
+                                    }
+                                </InputSelect>
+                                <ValidationMessage For="@(() => selectedUser.UserRoleId)" class="text-danger" />
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label">Email Confirmed</label>
+                                <div class="form-check form-switch">
+                                    <InputCheckbox @bind-Value="selectedUser.EmailConfirmed" class="form-check-input" />
+                                    <label class="form-check-label">Email is confirmed</label>
+                                </div>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label">Active Status</label>
+                                <div class="form-check form-switch">
+                                    <InputCheckbox @bind-Value="selectedUser.IsActive" class="form-check-input" />
+                                    <label class="form-check-label">User is active</label>
+                                </div>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label">Deleted Status</label>
+                                <div class="form-check form-switch">
+                                    <InputCheckbox @bind-Value="selectedUser.IsDeleted" class="form-check-input" />
+                                    <label class="form-check-label">User is deleted</label>
+                                </div>
+                            </div>
+                        </div>
+                    </EditForm>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseEditModal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-check-lg"></i> Update User
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Confirmation Modal -->
+@if (showConfirmationModal && selectedUser != null)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        @if (confirmationAction == "deactivate")
+                        {
+                            <text><i class="bi bi-exclamation-triangle text-warning"></i> Confirm Deactivation</text>
+                        }
+                        else if (confirmationAction == "activate")
+                        {
+                            <text><i class="bi bi-check-circle text-success"></i> Confirm Activation</text>
+                        }
+                        else if (confirmationAction == "delete")
+                        {
+                            <text><i class="bi bi-exclamation-triangle text-danger"></i> Confirm Deletion</text>
+                        }
+                        else if (confirmationAction == "restore")
+                        {
+                            <text><i class="bi bi-arrow-clockwise text-success"></i> Confirm Restoration</text>
+                        }
+                    </h5>
+                    <button type="button" class="btn-close" @onclick="CloseConfirmationModal"></button>
+                </div>
+                <div class="modal-body">
+                    @if (confirmationAction == "deactivate")
+                    {
+                        <p>You are about to <strong>deactivate</strong> the following user:</p>
+                        <div class="alert alert-warning">
+                            <strong>Email:</strong> @selectedUser.Email<br>
+                            <strong>Role:</strong> @(selectedUser.UserRole?.Name ?? "No Role")<br>
+                            <strong>Status:</strong> @(selectedUser.IsActive ? "Active" : "Inactive")<br>
+                            <strong>Email Confirmed:</strong> @(selectedUser.EmailConfirmed ? "Yes" : "No")
+                        </div>
+                        <p class="mb-0">This action will prevent the user from logging into the system. The user can be reactivated later if needed.</p>
+                    }
+                    else if (confirmationAction == "activate")
+                    {
+                        <p>You are about to <strong>activate</strong> the following user:</p>
+                        <div class="alert alert-success">
+                            <strong>Email:</strong> @selectedUser.Email<br>
+                            <strong>Role:</strong> @(selectedUser.UserRole?.Name ?? "No Role")<br>
+                            <strong>Status:</strong> @(selectedUser.IsActive ? "Active" : "Inactive")<br>
+                            <strong>Email Confirmed:</strong> @(selectedUser.EmailConfirmed ? "Yes" : "No")
+                        </div>
+                        <p class="mb-0">This action will allow the user to log into the system.</p>
+                    }
+                    else if (confirmationAction == "delete")
+                    {
+                        <p>You are about to <strong>soft delete</strong> the following user:</p>
+                        <div class="alert alert-danger">
+                            <strong>Email:</strong> @selectedUser.Email<br>
+                            <strong>Role:</strong> @(selectedUser.UserRole?.Name ?? "No Role")<br>
+                            <strong>Status:</strong> @(selectedUser.IsActive ? "Active" : "Inactive")<br>
+                            <strong>Email Confirmed:</strong> @(selectedUser.EmailConfirmed ? "Yes" : "No")
+                        </div>
+                        <p class="mb-0"><strong>Warning:</strong> This action will mark the user as deleted. The user can be restored later if needed.</p>
+                    }
+                    else if (confirmationAction == "restore")
+                    {
+                        <p>You are about to <strong>restore</strong> the following user:</p>
+                        <div class="alert alert-success">
+                            <strong>Email:</strong> @selectedUser.Email<br>
+                            <strong>Role:</strong> @(selectedUser.UserRole?.Name ?? "No Role")<br>
+                            <strong>Deleted Date:</strong> @(selectedUser.DeletedAt?.ToString("yyyy-MM-dd HH:mm") ?? "Unknown")<br>
+                            <strong>Deleted By:</strong> @(selectedUser.DeletedBy ?? "Unknown")
+                        </div>
+                        <p class="mb-0">This action will restore the user and allow them to log into the system again.</p>
+                    }
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseConfirmationModal">Cancel</button>
+                    @if (confirmationAction == "deactivate")
+                    {
+                        <button type="button" class="btn btn-warning" @onclick="ConfirmToggleUserActive">
+                            <i class="bi bi-pause-circle"></i> Deactivate User
+                        </button>
+                    }
+                    else if (confirmationAction == "activate")
+                    {
+                        <button type="button" class="btn btn-success" @onclick="ConfirmToggleUserActive">
+                            <i class="bi bi-play-circle"></i> Activate User
+                        </button>
+                    }
+                    else if (confirmationAction == "delete")
+                    {
+                        <button type="button" class="btn btn-danger" @onclick="ConfirmSoftDeleteUser">
+                            <i class="bi bi-trash"></i> Delete User
+                        </button>
+                    }
+                    else if (confirmationAction == "restore")
+                    {
+                        <button type="button" class="btn btn-success" @onclick="ConfirmRestoreUser">
+                            <i class="bi bi-arrow-clockwise"></i> Restore User
+                        </button>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<ApplicationUser>? allUsers;
+    private List<ApplicationUser>? filteredUsers;
+    private string searchText = string.Empty;
+    private string _searchField = "Email";
+    private bool showDeletedUsers = false;
+    
+    // Modal states
+    private bool showViewModal = false;
+    private bool showEditModal = false;
+    private bool showConfirmationModal = false;
+    private string confirmationAction = string.Empty;
+    private ApplicationUser? selectedUser = null;
+    
+    // Form models
+    private List<UserRole> availableRoles = new();
+    
+
+    private string SearchField
+    {
+        get => _searchField;
+        set
+        {
+            _searchField = value;
+            ApplyFilter();
+            StateHasChanged();
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadUsers();
+        await LoadRoles();
+    }
+
+    private async Task LoadUsers()
+    {
+        try
+        {
+            var query = DbContext.Users.AsQueryable();
+
+            if (!showDeletedUsers)
+            {
+                query = query.Where(u => !u.IsDeleted); // Filter out soft-deleted users by default
+            }
+
+            allUsers = await query
+                .Include(u => u.UserRole)
+                .OrderBy(u => u.Email)
+                .ToListAsync();
+
+            ApplyFilter();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading users");
+        }
+    }
+
+    private void OnSearchInput(ChangeEventArgs e)
+    {
+        searchText = e.Value?.ToString() ?? string.Empty;
+        ApplyFilter();
+        StateHasChanged();
+    }
+
+
+    private void ClearSearch()
+    {
+        searchText = string.Empty;
+        ApplyFilter();
+        StateHasChanged();
+    }
+
+    private async Task OnShowDeletedChanged()
+    {
+        await LoadUsers();
+        StateHasChanged();
+    }
+
+    private void ApplyFilter()
+    {
+        if (allUsers == null)
+        {
+            filteredUsers = null;
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(searchText))
+        {
+            filteredUsers = allUsers.ToList();
+            return;
+        }
+
+        var searchLower = searchText.ToLowerInvariant();
+
+        filteredUsers = _searchField switch
+        {
+            "Email" => allUsers.Where(u => u.Email?.ToLowerInvariant().Contains(searchLower) == true).ToList(),
+            "Role" => allUsers.Where(u => u.UserRole?.Name?.ToLowerInvariant().Contains(searchLower) == true).ToList(),
+            "EmailConfirmed" => allUsers.Where(u =>
+                (searchLower.Contains("confirmed") && u.EmailConfirmed) ||
+                (searchLower.Contains("pending") && !u.EmailConfirmed) ||
+                (searchLower.Contains("true") && u.EmailConfirmed) ||
+                (searchLower.Contains("false") && !u.EmailConfirmed)
+            ).ToList(),
+            _ => allUsers.ToList()
+        };
+    }
+
+    private async Task LoadRoles()
+    {
+        try
+        {
+            availableRoles = await DbContext.UserRoles
+                .Where(r => r.IsActive)
+                .OrderBy(r => r.Name)
+                .ToListAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading roles");
+        }
+    }
+
+
+    private async Task ViewUser(string userId)
+    {
+        try
+        {
+            selectedUser = await DbContext.Users
+                .Include(u => u.UserRole)
+                .Include(u => u.UserWebsiteAccesses)
+                    .ThenInclude(ua => ua.Website)
+                .FirstOrDefaultAsync(u => u.Id == userId);
+            
+            if (selectedUser != null)
+            {
+                showViewModal = true;
+                StateHasChanged();
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading user for view");
+        }
+    }
+
+    private async Task EditUser(string userId)
+    {
+        try
+        {
+            selectedUser = await DbContext.Users
+                .Include(u => u.UserRole)
+                .FirstOrDefaultAsync(u => u.Id == userId);
+            
+            if (selectedUser != null)
+            {
+                showEditModal = true;
+                StateHasChanged();
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading user for edit");
+        }
+    }
+
+
+
+
+    private async Task UpdateUser()
+    {
+        try
+        {
+            if (selectedUser == null) return;
+
+            // Server-side validation
+            if (selectedUser.UserRoleId == null || selectedUser.UserRoleId == 0)
+            {
+                Logger.LogWarning("Role is required");
+                return;
+            }
+
+            // Store the email before updating for logging
+            var userEmail = selectedUser.Email;
+
+            // Update the user
+            var result = await UserManager.UpdateAsync(selectedUser);
+            
+            if (result.Succeeded)
+            {
+                await LoadUsers(); // Refresh the user list
+                CloseEditModal();
+                StateHasChanged();
+                
+                Logger.LogInformation("User {Email} updated successfully", userEmail);
+            }
+            else
+            {
+                Logger.LogError("Failed to update user {Email}: {Errors}", userEmail, string.Join(", ", result.Errors.Select(e => e.Description)));
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error updating user");
+        }
+    }
+
+    private bool IsValidEmail(string email)
+    {
+        try
+        {
+            var addr = new System.Net.Mail.MailAddress(email);
+            return addr.Address == email;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private async Task GrantAccessToAllWebsites(string userId)
+    {
+        try
+        {
+            var websites = await DbContext.Websites.Where(w => w.IsActive).ToListAsync();
+            
+            foreach (var website in websites)
+            {
+                var existingAccess = await DbContext.UserWebsiteAccesses
+                    .FirstOrDefaultAsync(ua => ua.UserId == userId && ua.WebsiteId == website.Id);
+                
+                if (existingAccess == null)
+                {
+                    var access = new UserWebsiteAccess
+                    {
+                        UserId = userId,
+                        WebsiteId = website.Id,
+                        IsGranted = true,
+                        IsActive = true,
+                        CreatedAt = DateTime.UtcNow,
+                        CreatedByUserId = UserScope.UserId
+                    };
+                    
+                    DbContext.UserWebsiteAccesses.Add(access);
+                }
+            }
+            
+            await DbContext.SaveChangesAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error granting website access to user {UserId}", userId);
+        }
+    }
+
+
+    private void CloseViewModal()
+    {
+        showViewModal = false;
+        selectedUser = null;
+        StateHasChanged();
+    }
+
+    private void CloseEditModal()
+    {
+        showEditModal = false;
+        selectedUser = null;
+        StateHasChanged();
+    }
+
+    private async Task ToggleUserActive(string userId, bool isActive)
+    {
+        try
+        {
+            var user = await DbContext.Users.FindAsync(userId);
+            if (user != null)
+            {
+                user.IsActive = isActive;
+                await DbContext.SaveChangesAsync();
+                await LoadUsers(); // Refresh the user list
+                StateHasChanged();
+
+                var action = isActive ? "activated" : "deactivated";
+                Logger.LogInformation("User {Email} has been {Action}", user.Email, action);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error toggling user active status for user {UserId}", userId);
+        }
+    }
+
+    private async Task SoftDeleteUser(string userId)
+    {
+        try
+        {
+            var user = await DbContext.Users.FindAsync(userId);
+            if (user != null)
+            {
+                user.IsDeleted = true;
+                user.DeletedAt = DateTime.UtcNow;
+                user.DeletedBy = UserScope.UserId; // Track who deleted the user
+                await DbContext.SaveChangesAsync();
+                await LoadUsers(); // Refresh the user list
+                StateHasChanged();
+
+                Logger.LogInformation("User {Email} has been soft deleted by {DeletedBy}", user.Email, user.DeletedBy);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error soft deleting user {UserId}", userId);
+        }
+    }
+
+    private async Task RestoreUser(string userId)
+    {
+        try
+        {
+            var user = await DbContext.Users.FindAsync(userId);
+            if (user != null)
+            {
+                user.IsDeleted = false;
+                user.DeletedAt = null;
+                user.DeletedBy = null;
+                await DbContext.SaveChangesAsync();
+                await LoadUsers(); // Refresh the user list
+                StateHasChanged();
+
+                Logger.LogInformation("User {Email} has been restored", user.Email);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error restoring user {UserId}", userId);
+        }
+    }
+
+    private async Task ShowConfirmationModal(string userId, string action)
+    {
+        try
+        {
+            selectedUser = await DbContext.Users
+                .Include(u => u.UserRole)
+                .FirstOrDefaultAsync(u => u.Id == userId);
+            
+            if (selectedUser != null)
+            {
+                confirmationAction = action;
+                showConfirmationModal = true;
+                StateHasChanged();
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading user for confirmation");
+        }
+    }
+
+    private void CloseConfirmationModal()
+    {
+        showConfirmationModal = false;
+        confirmationAction = string.Empty;
+        selectedUser = null;
+        StateHasChanged();
+    }
+
+    private async Task ConfirmToggleUserActive()
+    {
+        if (selectedUser != null)
+        {
+            var isActive = confirmationAction == "activate";
+            await ToggleUserActive(selectedUser.Id, isActive);
+            CloseConfirmationModal();
+        }
+    }
+
+    private async Task ConfirmSoftDeleteUser()
+    {
+        if (selectedUser != null)
+        {
+            await SoftDeleteUser(selectedUser.Id);
+            CloseConfirmationModal();
+        }
+    }
+
+    private async Task ConfirmRestoreUser()
+    {
+        if (selectedUser != null)
+        {
+            await RestoreUser(selectedUser.Id);
+            CloseConfirmationModal();
+        }
+    }
+}

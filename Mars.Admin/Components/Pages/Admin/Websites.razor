@@ -1,0 +1,1243 @@
+@page "/admin/websites"
+@using Mars.Admin.Data
+@using Mars.Admin.Services
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.EntityFrameworkCore
+@using System.ComponentModel.DataAnnotations
+@inject ApplicationDbContext DbContext
+@inject IUserScope UserScope
+@inject ILogger<Websites> Logger
+@attribute [Authorize(Policy = "Website.Read")]
+
+@rendermode InteractiveServer
+
+<PageTitle>Website Management</PageTitle>
+
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <h2><i class="bi bi-globe"></i> Website Management</h2>
+            <p class="text-muted">Manage websites and their user access assignments</p>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">Websites</h5>
+                    @if (UserScope.HasPermission("Website.Create"))
+                    {
+                        <button class="btn btn-primary" @onclick="ShowCreateModal">
+                            <i class="bi bi-plus-lg"></i> Add Website
+                        </button>
+                    }
+                </div>
+                <div class="card-body">
+                    <!-- Search Controls -->
+                    <div class="row mb-3">
+                        <div class="col-md-4">
+                            <div class="input-group">
+                                <span class="input-group-text">
+                                    <i class="bi bi-search"></i>
+                                </span>
+                                <input type="text"
+                                       class="form-control"
+                                       placeholder="Search websites..."
+                                       value="@searchText"
+                                       @oninput="OnSearchInput" />
+                                <button class="btn btn-outline-secondary" @onclick="ClearSearch" type="button">
+                                    <i class="bi bi-x-lg"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <select class="form-select" @bind="SearchField">
+                                <option value="Code">Code</option>
+                                <option value="Name">Name</option>
+                                <option value="Url">URL</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="d-flex align-items-center">
+                                <input class="form-check-input" type="checkbox" id="showInactive"
+                                       @bind="ShowInactiveWebsites"
+                                       style="transform: scale(1.5); margin-top: 0;">
+                                <span class="fw-medium ms-3">Show Inactive</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    @if (isLoading)
+                    {
+                        <div class="text-center">
+                            <div class="spinner-border" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="table-responsive">
+                            <table class="table table-striped table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Code</th>
+                                        <th>Name</th>
+                                        <th>URL</th>
+                                        <th>Active</th>
+                                        <th>Users</th>
+                                        <th>Created</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var website in filteredWebsites)
+                                    {
+                                        var hasUsers = website.UserWebsiteAccesses?.Any() == true;
+                                        <tr class="@(website.IsActive ? "" : "table-secondary opacity-75")">
+                                            <td>
+                                                <strong>@website.Code</strong>
+                                                @if (hasUsers)
+                                                {
+                                                    <span class="badge bg-info ms-2" title="Assigned to @website?.UserWebsiteAccesses?.Count user(s)">Protected</span>
+                                                }
+                                            </td>
+                                            <td>@website?.Name</td>
+                                            <td>
+                                                @if (!string.IsNullOrEmpty(website?.Url))
+                                                {
+                                                    <a href="@website.Url" target="_blank" class="text-decoration-none">
+                                                        @website.Url <i class="bi bi-box-arrow-up-right"></i>
+                                                    </a>
+                                                }
+                                                else
+                                                {
+                                                    <span class="text-muted">No URL</span>
+                                                }
+                                            </td>
+                                            <td>
+                                                @if (website!.IsActive)
+                                                {
+                                                    <span class="badge bg-success">Active</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="badge bg-secondary">Inactive</span>
+                                                }
+                                            </td>
+                                            <td>
+                                                <span class="badge bg-info">@(website.UserWebsiteAccesses?.Count ?? 0)</span>
+                                            </td>
+                                            <td>@website.CreatedAt.ToString("yyyy-MM-dd")</td>
+                                            <td>
+                                                <div class="btn-group" role="group">
+                                                    <button class="btn btn-sm btn-outline-primary" @onclick="() => ViewWebsite(website.Id)" title="View Details">
+                                                        <i class="bi bi-eye"></i>
+                                                    </button>
+                                                    @if (UserScope.HasPermission("Website.Update"))
+                                                    {
+                                                        <button class="btn btn-sm btn-outline-secondary" @onclick="() => EditWebsite(website.Id)" title="Edit Website">
+                                                            <i class="bi bi-pencil-square"></i>
+                                                        </button>
+                                                    }
+                                                    @if (UserScope.HasPermission("Website.Update"))
+                                                    {
+                                                        <button class="btn btn-sm btn-outline-info" @onclick="() => ManageWebsiteUsers(website.Id)" title="Manage Users">
+                                                            <i class="bi bi-people"></i>
+                                                        </button>
+                                                    }
+                                                    @if (UserScope.HasPermission("Website.Update"))
+                                                    {
+                                                        @if (website.IsActive)
+                                                        {
+                                                            @if (hasUsers)
+                                                            {
+                                                                <button class="btn btn-sm btn-outline-warning" disabled title="Cannot deactivate website with assigned users">
+                                                                    <i class="bi bi-pause-circle"></i>
+                                                                </button>
+                                                            }
+                                                            else
+                                                            {
+                                                                <button class="btn btn-sm btn-outline-warning" @onclick='() => ShowConfirmationModal(website.Id, "deactivate")' title="Deactivate Website">
+                                                                    <i class="bi bi-pause-circle"></i>
+                                                                </button>
+                                                            }
+                                                        }
+                                                        else
+                                                        {
+                                                            <button class="btn btn-sm btn-outline-success" @onclick='() => ShowConfirmationModal(website.Id, "activate")' title="Activate Website">
+                                                                <i class="bi bi-play-circle"></i>
+                                                            </button>
+                                                        }
+                                                    }
+                                                    @if (UserScope.HasPermission("Website.Delete"))
+                                                    {
+                                                        @if (hasUsers)
+                                                        {
+                                                            <button class="btn btn-sm btn-outline-danger" disabled title="Cannot delete website with assigned users">
+                                                                <i class="bi bi-trash"></i>
+                                                            </button>
+                                                        }
+                                                        else
+                                                        {
+                                                            <button class="btn btn-sm btn-outline-danger" @onclick='() => ShowConfirmationModal(website.Id, "delete")' title="Delete Website">
+                                                                <i class="bi bi-trash"></i>
+                                                            </button>
+                                                        }
+                                                    }
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add Website Modal -->
+@if (showCreateModal)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-plus-lg"></i> Add New Website</h5>
+                    <button type="button" class="btn-close" @onclick="CloseCreateModal"></button>
+                </div>
+                <div class="modal-body">
+                    <EditForm Model="websiteFormModel" OnInvalidSubmit="OnInvalidSubmit">
+                        <DataAnnotationsValidator />
+                        <ValidationSummary class="text-danger" />
+                        
+                        @if (!string.IsNullOrEmpty(createErrorMessage))
+                        {
+                            <div class="alert alert-danger">
+                                @createErrorMessage
+                            </div>
+                        }
+
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label">Website Code <span class="text-danger">*</span></label>
+                                    <InputText class="form-control" @bind-Value="websiteFormModel.Code" placeholder="Enter website code (e.g., SITE1)" />
+                                    <ValidationMessage For="@(() => websiteFormModel.Code)" class="text-danger" />
+                                    <div class="form-text">Unique identifier for the website</div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label">Website Name <span class="text-danger">*</span></label>
+                                    <InputText class="form-control" @bind-Value="websiteFormModel.Name" placeholder="Enter website name" />
+                                    <ValidationMessage For="@(() => websiteFormModel.Name)" class="text-danger" />
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Website URL</label>
+                            <InputText class="form-control" @bind-Value="websiteFormModel.Url" placeholder="Enter website URL (optional)" />
+                            <div class="form-text">Full URL including protocol (e.g., https://example.com)</div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Status</label>
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" @bind="websiteFormModel.IsActive">
+                                <label class="form-check-label">Active</label>
+                            </div>
+                        </div>
+                    </EditForm>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseCreateModal">Cancel</button>
+                    <button type="button" class="btn btn-primary" @onclick="CreateWebsite">
+                        <i class="bi bi-check-lg"></i> Create Website
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- View Website Modal -->
+@if (showViewModal && selectedWebsite != null)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-eye"></i> Website Details</h5>
+                    <button type="button" class="btn-close" @onclick="CloseViewModal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6>Basic Information</h6>
+                            <table class="table table-sm">
+                                <tr>
+                                    <td><strong>Code:</strong></td>
+                                    <td>@selectedWebsite.Code</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Name:</strong></td>
+                                    <td>@selectedWebsite.Name</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>URL:</strong></td>
+                                    <td>
+                                        @if (!string.IsNullOrEmpty(selectedWebsite.Url))
+                                        {
+                                            <a href="@selectedWebsite.Url" target="_blank" class="text-decoration-none">
+                                                @selectedWebsite.Url <i class="bi bi-box-arrow-up-right"></i>
+                                            </a>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted">No URL</span>
+                                        }
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Status:</strong></td>
+                                    <td>
+                                        @if (selectedWebsite.IsActive)
+                                        {
+                                            <span class="badge bg-success">Active</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-secondary">Inactive</span>
+                                        }
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Created:</strong></td>
+                                    <td>@selectedWebsite.CreatedAt.ToString("yyyy-MM-dd HH:mm")</td>
+                                </tr>
+                                @if (selectedWebsite.ModifiedAt.HasValue)
+                                {
+                                    <tr>
+                                        <td><strong>Modified:</strong></td>
+                                        <td>@selectedWebsite.ModifiedAt.Value.ToString("yyyy-MM-dd HH:mm")</td>
+                                    </tr>
+                                }
+                            </table>
+                        </div>
+                        <div class="col-md-6">
+                            <h6>Users with Access</h6>
+                            @if (selectedWebsite.UserWebsiteAccesses?.Any() == true)
+                            {
+                                <div class="list-group">
+                                    @foreach (var userAccess in selectedWebsite.UserWebsiteAccesses.Where(ua => ua.IsActive))
+                                    {
+                                        <div class="list-group-item d-flex justify-content-between align-items-center">
+                                            <span>@userAccess.User?.Email</span>
+                                            <span class="badge @(userAccess.IsGranted ? "bg-success" : "bg-danger")">
+                                                @(userAccess.IsGranted ? "Granted" : "Denied")
+                                            </span>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                            else
+                            {
+                                <p class="text-muted">No users assigned to this website</p>
+                            }
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseViewModal">Close</button>
+                    @if (UserScope.HasPermission("Website.Update"))
+                    {
+                        <button type="button" class="btn btn-primary" @onclick="async () => { var websiteId = selectedWebsite?.Id; CloseViewModal(); if (websiteId.HasValue) await EditWebsite(websiteId.Value); }">
+                            <i class="bi bi-pencil-square"></i> Edit Website
+                        </button>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Edit Website Modal -->
+@if (showEditModal && selectedWebsite != null)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-pencil-square"></i> Edit Website</h5>
+                    <button type="button" class="btn-close" @onclick="CloseEditModal"></button>
+                </div>
+                <div class="modal-body">
+                    <EditForm Model="editWebsiteFormModel" OnInvalidSubmit="OnInvalidSubmit">
+                        <DataAnnotationsValidator />
+                        <ValidationSummary class="text-danger" />
+                        
+                        @if (!string.IsNullOrEmpty(editErrorMessage))
+                        {
+                            <div class="alert alert-danger">
+                                @editErrorMessage
+                            </div>
+                        }
+
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label">Website Code <span class="text-danger">*</span></label>
+                                    <InputText class="form-control" @bind-Value="editWebsiteFormModel.Code" placeholder="Enter website code (e.g., SITE1)" />
+                                    <ValidationMessage For="@(() => editWebsiteFormModel.Code)" class="text-danger" />
+                                    <div class="form-text">Unique identifier for the website</div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label">Website Name <span class="text-danger">*</span></label>
+                                    <InputText class="form-control" @bind-Value="editWebsiteFormModel.Name" placeholder="Enter website name" />
+                                    <ValidationMessage For="@(() => editWebsiteFormModel.Name)" class="text-danger" />
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Website URL</label>
+                            <InputText class="form-control" @bind-Value="editWebsiteFormModel.Url" placeholder="Enter website URL (optional)" />
+                            <div class="form-text">Full URL including protocol (e.g., https://example.com)</div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Status</label>
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" @bind="editWebsiteFormModel.IsActive">
+                                <label class="form-check-label">Active</label>
+                            </div>
+                        </div>
+                    </EditForm>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseEditModal">Cancel</button>
+                    <button type="button" class="btn btn-primary" @onclick="UpdateWebsite">
+                        <i class="bi bi-check-lg"></i> Update Website
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- User Management Modal -->
+@if (showUserModal && selectedWebsite != null)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-people"></i> Manage Users - @selectedWebsite.Name</h5>
+                    <button type="button" class="btn-close" @onclick="CloseUserModal"></button>
+                </div>
+                <div class="modal-body">
+                    @if (isLoadingUsers)
+                    {
+                        <div class="text-center">
+                            <div class="spinner-border" role="status">
+                                <span class="visually-hidden">Loading users...</span>
+                            </div>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h6>Available Users</h6>
+                                <div class="border rounded p-3" style="max-height: 400px; overflow-y: auto;">
+                                    @if (availableUsers?.Any() == true)
+                                    {
+                                        @foreach (var user in availableUsers)
+                                        {
+                                            <div class="form-check mb-2">
+                                                <input class="form-check-input" 
+                                                       type="checkbox" 
+                                                       id="user_@user.Id"
+                                                       @onchange="(e) => ToggleUserAssignment(user.Id, (bool)e.Value!)"
+                                                       checked="@IsUserAssigned(user.Id)">
+                                                <label class="form-check-label" for="user_@user.Id">
+                                                    <strong>@user.Email</strong>
+                                                </label>
+                                            </div>
+                                        }
+                                    }
+                                    else
+                                    {
+                                        <p class="text-muted">No users available</p>
+                                    }
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <h6>Assigned Users</h6>
+                                <div class="border rounded p-3" style="max-height: 400px; overflow-y: auto;">
+                                    @if (websiteUsers?.Any() == true)
+                                    {
+                                        @foreach (var userAccess in websiteUsers.Where(ua => ua.IsActive))
+                                        {
+                                            <div class="d-flex justify-content-between align-items-center mb-2 p-2 border rounded">
+                                                <div>
+                                                    <strong>@userAccess.User?.Email</strong>
+                                                </div>
+                                                <div class="d-flex align-items-center">
+                                                    <span class="badge @(userAccess.IsGranted ? "bg-success" : "bg-danger") me-2">
+                                                        @(userAccess.IsGranted ? "Granted" : "Denied")
+                                                    </span>
+                                                    <button class="btn btn-sm btn-outline-danger" 
+                                                            @onclick="() => RemoveUserFromWebsite(userAccess.UserId)" 
+                                                            title="Remove User">
+                                                        <i class="bi bi-x"></i>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        }
+                                    }
+                                    else
+                                    {
+                                        <p class="text-muted">No users assigned to this website</p>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                        
+                        @if (!string.IsNullOrEmpty(userErrorMessage))
+                        {
+                            <div class="alert alert-danger mt-3">
+                                @userErrorMessage
+                            </div>
+                        }
+                    }
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseUserModal">Close</button>
+                    <button type="button" class="btn btn-primary" @onclick="SaveWebsiteUsers">
+                        <i class="bi bi-check-lg"></i> Save Changes
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Confirmation Modal -->
+@if (showConfirmationModal && selectedWebsite != null)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        @if (confirmationAction == "deactivate")
+                        {
+                            <text><i class="bi bi-exclamation-triangle text-warning"></i> Confirm Deactivation</text>
+                        }
+                        else if (confirmationAction == "activate")
+                        {
+                            <text><i class="bi bi-check-circle text-success"></i> Confirm Activation</text>
+                        }
+                        else if (confirmationAction == "delete")
+                        {
+                            <text><i class="bi bi-exclamation-triangle text-danger"></i> Confirm Deletion</text>
+                        }
+                    </h5>
+                    <button type="button" class="btn-close" @onclick="CloseConfirmationModal"></button>
+                </div>
+                <div class="modal-body">
+                    @if (confirmationAction == "deactivate")
+                    {
+                        <p>You are about to <strong>deactivate</strong> the following website:</p>
+                        <div class="alert alert-warning">
+                            <strong>Code:</strong> @selectedWebsite.Code<br>
+                            <strong>Name:</strong> @selectedWebsite.Name<br>
+                            <strong>Users:</strong> @(selectedWebsite.UserWebsiteAccesses?.Count ?? 0)
+                        </div>
+                        @if (selectedWebsite.UserWebsiteAccesses?.Any() == true)
+                        {
+                            <div class="alert alert-danger">
+                                <strong>Warning:</strong> This website is assigned to @selectedWebsite.UserWebsiteAccesses.Count user(s). 
+                                Deactivating this website will affect all users with access to it.
+                            </div>
+                        }
+                        <p class="mb-0">This action will prevent this website from being used in the system. The website can be reactivated later if needed.</p>
+                    }
+                    else if (confirmationAction == "activate")
+                    {
+                        <p>You are about to <strong>activate</strong> the following website:</p>
+                        <div class="alert alert-success">
+                            <strong>Code:</strong> @selectedWebsite.Code<br>
+                            <strong>Name:</strong> @selectedWebsite.Name<br>
+                            <strong>Users:</strong> @(selectedWebsite.UserWebsiteAccesses?.Count ?? 0)
+                        </div>
+                        <p class="mb-0">This action will allow this website to be used in the system.</p>
+                    }
+                    else if (confirmationAction == "delete")
+                    {
+                        <p>You are about to <strong>permanently delete</strong> the following website:</p>
+                        <div class="alert alert-danger">
+                            <strong>Code:</strong> @selectedWebsite.Code<br>
+                            <strong>Name:</strong> @selectedWebsite.Name<br>
+                            <strong>Users:</strong> @(selectedWebsite.UserWebsiteAccesses?.Count ?? 0)
+                        </div>
+                        @if (selectedWebsite.UserWebsiteAccesses?.Any() == true)
+                        {
+                            <div class="alert alert-danger">
+                                <strong>CRITICAL WARNING:</strong> This website is assigned to @selectedWebsite.UserWebsiteAccesses.Count user(s). 
+                                <strong>This action cannot be performed while users are assigned to this website.</strong>
+                            </div>
+                        }
+                        <p class="mb-0"><strong>Warning:</strong> This action cannot be undone. The website will be permanently removed from the system.</p>
+                    }
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseConfirmationModal">Cancel</button>
+                    @if (confirmationAction == "deactivate")
+                    {
+                        @if (selectedWebsite.UserWebsiteAccesses?.Any() == true)
+                        {
+                            <button type="button" class="btn btn-warning" disabled title="Cannot deactivate website with assigned users">
+                                <i class="bi bi-pause-circle"></i> Deactivate Website
+                            </button>
+                        }
+                        else
+                        {
+                            <button type="button" class="btn btn-warning" @onclick="ConfirmToggleWebsiteActive">
+                                <i class="bi bi-pause-circle"></i> Deactivate Website
+                            </button>
+                        }
+                    }
+                    else if (confirmationAction == "activate")
+                    {
+                        <button type="button" class="btn btn-success" @onclick="ConfirmToggleWebsiteActive">
+                            <i class="bi bi-play-circle"></i> Activate Website
+                        </button>
+                    }
+                    else if (confirmationAction == "delete")
+                    {
+                        @if (selectedWebsite.UserWebsiteAccesses?.Any() == true)
+                        {
+                            <button type="button" class="btn btn-danger" disabled title="Cannot delete website with assigned users">
+                                <i class="bi bi-trash"></i> Delete Website
+                            </button>
+                        }
+                        else
+                        {
+                            <button type="button" class="btn btn-danger" @onclick="ConfirmDeleteWebsite">
+                                <i class="bi bi-trash"></i> Delete Website
+                            </button>
+                        }
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<Website> allWebsites = new();
+    private List<Website> filteredWebsites = new();
+    private bool isLoading = true;
+    
+    // Search and filter
+    private string searchText = string.Empty;
+    private string _searchField = "Code";
+    private bool showInactiveWebsites = false;
+    
+    // Modal states
+    private bool showCreateModal = false;
+    private bool showViewModal = false;
+    private bool showEditModal = false;
+    private bool showUserModal = false;
+    private bool showConfirmationModal = false;
+    private string confirmationAction = string.Empty;
+    private Website? selectedWebsite = null;
+    
+    // User management
+    private List<ApplicationUser> availableUsers = new();
+    private List<UserWebsiteAccess> websiteUsers = new();
+    private List<string> pendingUserChanges = new();
+    private bool isLoadingUsers = false;
+    private string? userErrorMessage = null;
+    
+    // Form models
+    public class WebsiteFormModel
+    {
+        [Required(ErrorMessage = "Website code is required")]
+        [MaxLength(50, ErrorMessage = "Website code cannot exceed 50 characters")]
+        public string Code { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Website name is required")]
+        [MaxLength(200, ErrorMessage = "Website name cannot exceed 200 characters")]
+        public string Name { get; set; } = string.Empty;
+
+        [MaxLength(500, ErrorMessage = "URL cannot exceed 500 characters")]
+        public string? Url { get; set; }
+        
+        public bool IsActive { get; set; } = true;
+    }
+
+    public class EditWebsiteFormModel
+    {
+        [Required(ErrorMessage = "Website code is required")]
+        [MaxLength(50, ErrorMessage = "Website code cannot exceed 50 characters")]
+        public string Code { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Website name is required")]
+        [MaxLength(200, ErrorMessage = "Website name cannot exceed 200 characters")]
+        public string Name { get; set; } = string.Empty;
+
+        [MaxLength(500, ErrorMessage = "URL cannot exceed 500 characters")]
+        public string? Url { get; set; }
+        
+        public bool IsActive { get; set; } = true;
+    }
+    
+    private WebsiteFormModel websiteFormModel = new();
+    private EditWebsiteFormModel editWebsiteFormModel = new();
+    
+    private string? createErrorMessage = null;
+    private string? editErrorMessage = null;
+
+    private string SearchField
+    {
+        get => _searchField;
+        set
+        {
+            _searchField = value;
+            ApplyFilter();
+            StateHasChanged();
+        }
+    }
+
+    private bool ShowInactiveWebsites
+    {
+        get => showInactiveWebsites;
+        set
+        {
+            showInactiveWebsites = value;
+            ApplyFilter();
+            StateHasChanged();
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadWebsites();
+    }
+
+    private async Task LoadWebsites()
+    {
+        try
+        {
+            isLoading = true;
+            allWebsites = await DbContext.Websites
+                .Include(w => w.UserWebsiteAccesses)
+                    .ThenInclude(uwa => uwa.User)
+                .OrderBy(w => w.Code)
+                .ToListAsync();
+            ApplyFilter();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading websites");
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void ApplyFilter()
+    {
+        var query = allWebsites.AsQueryable();
+
+        if (!showInactiveWebsites)
+        {
+            query = query.Where(w => w.IsActive);
+        }
+
+        if (!string.IsNullOrWhiteSpace(searchText))
+        {
+            query = SearchField switch
+            {
+                "Code" => query.Where(w => w.Code.Contains(searchText, StringComparison.OrdinalIgnoreCase)),
+                "Name" => query.Where(w => w.Name.Contains(searchText, StringComparison.OrdinalIgnoreCase)),
+                "Url" => query.Where(w => w.Url != null && w.Url.Contains(searchText, StringComparison.OrdinalIgnoreCase)),
+                _ => query
+            };
+        }
+
+        filteredWebsites = query.ToList();
+    }
+
+    private void OnSearchInput(ChangeEventArgs e)
+    {
+        searchText = e.Value?.ToString() ?? string.Empty;
+        ApplyFilter();
+        StateHasChanged();
+    }
+
+    private void ClearSearch()
+    {
+        searchText = string.Empty;
+        ApplyFilter();
+        StateHasChanged();
+    }
+
+    private void ShowCreateModal()
+    {
+        createErrorMessage = null;
+        websiteFormModel = new WebsiteFormModel
+        {
+            Code = string.Empty,
+            Name = string.Empty,
+            Url = string.Empty,
+            IsActive = true
+        };
+        showCreateModal = true;
+        StateHasChanged();
+    }
+
+    private void CloseCreateModal()
+    {
+        showCreateModal = false;
+        websiteFormModel = new WebsiteFormModel();
+        StateHasChanged();
+    }
+
+    private async Task ViewWebsite(int websiteId)
+    {
+        try
+        {
+            selectedWebsite = await DbContext.Websites
+                .Include(w => w.UserWebsiteAccesses)
+                    .ThenInclude(uwa => uwa.User)
+                .FirstOrDefaultAsync(w => w.Id == websiteId);
+            
+            if (selectedWebsite != null)
+            {
+                showViewModal = true;
+                StateHasChanged();
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading website for view");
+        }
+    }
+
+    private void CloseViewModal()
+    {
+        showViewModal = false;
+        selectedWebsite = null;
+        StateHasChanged();
+    }
+
+    private async Task EditWebsite(int websiteId)
+    {
+        try
+        {
+            editErrorMessage = null;
+            selectedWebsite = await DbContext.Websites
+                .Include(w => w.UserWebsiteAccesses)
+                    .ThenInclude(uwa => uwa.User)
+                .FirstOrDefaultAsync(w => w.Id == websiteId);
+            
+            if (selectedWebsite != null)
+            {
+                editWebsiteFormModel = new EditWebsiteFormModel
+                {
+                    Code = selectedWebsite.Code,
+                    Name = selectedWebsite.Name,
+                    Url = selectedWebsite.Url,
+                    IsActive = selectedWebsite.IsActive
+                };
+                
+                showEditModal = true;
+                StateHasChanged();
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading website for edit");
+        }
+    }
+
+    private void CloseEditModal()
+    {
+        showEditModal = false;
+        selectedWebsite = null;
+        editWebsiteFormModel = new EditWebsiteFormModel();
+        StateHasChanged();
+    }
+
+    private void OnInvalidSubmit(EditContext editContext)
+    {
+        Logger.LogWarning("Form validation failed");
+        StateHasChanged();
+    }
+
+    private async Task CreateWebsite()
+    {
+        try
+        {
+            // Clear any previous error messages
+            createErrorMessage = null;
+
+            // Check if website code already exists
+            var existingWebsite = await DbContext.Websites
+                .FirstOrDefaultAsync(w => w.Code.ToLower() == websiteFormModel.Code.ToLower());
+            
+            if (existingWebsite != null)
+            {
+                createErrorMessage = "A website with this code already exists.";
+                StateHasChanged();
+                return;
+            }
+
+            var newWebsite = new Website
+            {
+                Code = websiteFormModel.Code,
+                Name = websiteFormModel.Name,
+                Url = websiteFormModel.Url,
+                IsActive = websiteFormModel.IsActive,
+                CreatedAt = DateTime.UtcNow,
+                CreatedByUserId = UserScope.UserId
+            };
+
+            DbContext.Websites.Add(newWebsite);
+            await DbContext.SaveChangesAsync();
+
+            await LoadWebsites();
+            CloseCreateModal();
+            StateHasChanged();
+
+            Logger.LogInformation("Website {WebsiteCode} created successfully", newWebsite.Code);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error creating website");
+            createErrorMessage = "An error occurred while creating the website. Please try again.";
+            StateHasChanged();
+        }
+    }
+
+    private async Task UpdateWebsite()
+    {
+        try
+        {
+            if (selectedWebsite == null) return;
+
+            // Clear any previous error messages
+            editErrorMessage = null;
+
+            // Store the website code for logging before any changes
+            var websiteCode = selectedWebsite.Code;
+
+            // Check if website code already exists (excluding current website)
+            var existingWebsite = await DbContext.Websites
+                .FirstOrDefaultAsync(w => w.Code.ToLower() == editWebsiteFormModel.Code.ToLower() && w.Id != selectedWebsite.Id);
+            
+            if (existingWebsite != null)
+            {
+                editErrorMessage = "A website with this code already exists.";
+                StateHasChanged();
+                return;
+            }
+
+            selectedWebsite.Code = editWebsiteFormModel.Code;
+            selectedWebsite.Name = editWebsiteFormModel.Name;
+            selectedWebsite.Url = editWebsiteFormModel.Url;
+            selectedWebsite.IsActive = editWebsiteFormModel.IsActive;
+            selectedWebsite.ModifiedAt = DateTime.UtcNow;
+            selectedWebsite.ModifiedByUserId = UserScope.UserId;
+
+            await DbContext.SaveChangesAsync();
+
+            await LoadWebsites();
+            CloseEditModal();
+            StateHasChanged();
+
+            Logger.LogInformation("Website {WebsiteCode} updated successfully", websiteCode);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error updating website");
+            editErrorMessage = "An error occurred while updating the website. Please try again.";
+            StateHasChanged();
+        }
+    }
+
+    private async Task ManageWebsiteUsers(int websiteId)
+    {
+        try
+        {
+            isLoadingUsers = true;
+            userErrorMessage = null;
+            pendingUserChanges.Clear();
+            
+            // Load the selected website with its user assignments
+            selectedWebsite = await DbContext.Websites
+                .Include(w => w.UserWebsiteAccesses)
+                    .ThenInclude(uwa => uwa.User)
+                .FirstOrDefaultAsync(w => w.Id == websiteId);
+            
+            if (selectedWebsite != null)
+            {
+                // Load all available users
+                availableUsers = await DbContext.Users
+                    .Where(u => u.IsActive && !u.IsDeleted)
+                    .OrderBy(u => u.Email)
+                    .ToListAsync();
+                
+                // Get current website user assignments
+                websiteUsers = selectedWebsite.UserWebsiteAccesses.ToList();
+                
+                showUserModal = true;
+                StateHasChanged();
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading website users");
+            userErrorMessage = "An error occurred while loading users. Please try again.";
+        }
+        finally
+        {
+            isLoadingUsers = false;
+        }
+    }
+
+    private void CloseUserModal()
+    {
+        showUserModal = false;
+        selectedWebsite = null;
+        availableUsers.Clear();
+        websiteUsers.Clear();
+        pendingUserChanges.Clear();
+        userErrorMessage = null;
+        StateHasChanged();
+    }
+
+    private bool IsUserAssigned(string userId)
+    {
+        return websiteUsers.Any(uwa => uwa.UserId == userId && uwa.IsActive);
+    }
+
+    private void ToggleUserAssignment(string userId, bool isAssigned)
+    {
+        if (isAssigned)
+        {
+            // Add to pending changes if not already assigned
+            if (!IsUserAssigned(userId) && !pendingUserChanges.Contains(userId))
+            {
+                pendingUserChanges.Add(userId);
+            }
+        }
+        else
+        {
+            // Remove from pending changes if it was added
+            pendingUserChanges.Remove(userId);
+        }
+        StateHasChanged();
+    }
+
+    private void RemoveUserFromWebsite(string userId)
+    {
+        var userAccess = websiteUsers.FirstOrDefault(uwa => uwa.UserId == userId);
+        if (userAccess != null)
+        {
+            userAccess.IsActive = false;
+            userAccess.ModifiedAt = DateTime.UtcNow;
+            userAccess.ModifiedByUserId = UserScope.UserId;
+        }
+        StateHasChanged();
+    }
+
+    private async Task SaveWebsiteUsers()
+    {
+        try
+        {
+            userErrorMessage = null;
+            
+            if (selectedWebsite == null) return;
+
+            // Add new user assignments
+            foreach (var userId in pendingUserChanges)
+            {
+                var existingUserAccess = websiteUsers.FirstOrDefault(uwa => uwa.UserId == userId);
+                
+                if (existingUserAccess != null)
+                {
+                    // Reactivate existing user access
+                    existingUserAccess.IsActive = true;
+                    existingUserAccess.IsGranted = true;
+                    existingUserAccess.ModifiedAt = DateTime.UtcNow;
+                    existingUserAccess.ModifiedByUserId = UserScope.UserId;
+                }
+                else
+                {
+                    // Create new user website access
+                    var newUserAccess = new UserWebsiteAccess
+                    {
+                        UserId = userId,
+                        WebsiteId = selectedWebsite.Id,
+                        IsGranted = true,
+                        IsActive = true,
+                        CreatedAt = DateTime.UtcNow,
+                        CreatedByUserId = UserScope.UserId
+                    };
+                    
+                    DbContext.UserWebsiteAccesses.Add(newUserAccess);
+                    websiteUsers.Add(newUserAccess);
+                }
+            }
+
+            await DbContext.SaveChangesAsync();
+            
+            // Store the website code for logging before closing the modal
+            var websiteCode = selectedWebsite.Code;
+            
+            // Reload websites to refresh the data
+            await LoadWebsites();
+            
+            CloseUserModal();
+            StateHasChanged();
+
+            Logger.LogInformation("User assignments updated for website {WebsiteCode}", websiteCode);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error saving website user assignments");
+            userErrorMessage = "An error occurred while saving user assignments. Please try again.";
+            StateHasChanged();
+        }
+    }
+
+    private async Task ShowConfirmationModal(int websiteId, string action)
+    {
+        try
+        {
+            selectedWebsite = await DbContext.Websites
+                .Include(w => w.UserWebsiteAccesses)
+                    .ThenInclude(uwa => uwa.User)
+                .FirstOrDefaultAsync(w => w.Id == websiteId);
+            
+            if (selectedWebsite != null)
+            {
+                confirmationAction = action;
+                showConfirmationModal = true;
+                StateHasChanged();
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading website for confirmation");
+        }
+    }
+
+    private void CloseConfirmationModal()
+    {
+        showConfirmationModal = false;
+        confirmationAction = string.Empty;
+        selectedWebsite = null;
+        StateHasChanged();
+    }
+
+    private async Task ConfirmToggleWebsiteActive()
+    {
+        if (selectedWebsite != null)
+        {
+            await ToggleWebsiteActive(selectedWebsite.Id);
+            CloseConfirmationModal();
+        }
+    }
+
+    private async Task ConfirmDeleteWebsite()
+    {
+        if (selectedWebsite != null)
+        {
+            await DeleteWebsite(selectedWebsite.Id);
+            CloseConfirmationModal();
+        }
+    }
+
+    private async Task ToggleWebsiteActive(int websiteId)
+    {
+        try
+        {
+            var website = await DbContext.Websites
+                .Include(w => w.UserWebsiteAccesses)
+                .FirstOrDefaultAsync(w => w.Id == websiteId);
+            
+            if (website != null)
+            {
+                // Prevent deactivation if users are assigned
+                if (!website.IsActive && website.UserWebsiteAccesses.Any())
+                {
+                    Logger.LogWarning("Cannot deactivate website {WebsiteCode} because it is assigned to {UserCount} users", website.Code, website.UserWebsiteAccesses.Count);
+                    return;
+                }
+
+                website.IsActive = !website.IsActive;
+                website.ModifiedAt = DateTime.UtcNow;
+                website.ModifiedByUserId = UserScope.UserId;
+                
+                await DbContext.SaveChangesAsync();
+
+                await LoadWebsites();
+                StateHasChanged();
+
+                var status = website.IsActive ? "activated" : "deactivated";
+                Logger.LogInformation("Website {WebsiteCode} {Status} successfully", website.Code, status);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error toggling website active status");
+        }
+    }
+
+    private async Task DeleteWebsite(int websiteId)
+    {
+        try
+        {
+            var website = await DbContext.Websites
+                .Include(w => w.UserWebsiteAccesses)
+                .FirstOrDefaultAsync(w => w.Id == websiteId);
+            
+            if (website != null)
+            {
+                // Check if website has users assigned
+                if (website.UserWebsiteAccesses.Any())
+                {
+                    Logger.LogWarning("Cannot delete website {WebsiteCode} because it is assigned to {UserCount} users", website.Code, website.UserWebsiteAccesses.Count);
+                    return;
+                }
+
+                DbContext.Websites.Remove(website);
+                await DbContext.SaveChangesAsync();
+
+                await LoadWebsites();
+                StateHasChanged();
+
+                Logger.LogInformation("Website {WebsiteCode} deleted successfully", website.Code);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error deleting website");
+        }
+    }
+}
