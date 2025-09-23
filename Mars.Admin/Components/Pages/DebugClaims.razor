@@ -1,0 +1,112 @@
+@page "/debug-claims"
+@using System.Security.Claims
+@using Microsoft.AspNetCore.Authorization
+@inject IHttpContextAccessor HttpContextAccessor
+@attribute [Authorize]
+
+<PageTitle>Debug Claims</PageTitle>
+
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <h2>Debug Claims</h2>
+            <p class="text-muted">This page shows all claims for the current user</p>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">User Claims</h5>
+                </div>
+                <div class="card-body">
+                    @if (HttpContextAccessor.HttpContext?.User?.Identity?.IsAuthenticated == true)
+                    {
+                        <div class="table-responsive">
+                            <table class="table table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>Claim Type</th>
+                                        <th>Value</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var claim in HttpContextAccessor.HttpContext.User.Claims)
+                                    {
+                                        <tr>
+                                            <td><code>@claim.Type</code></td>
+                                            <td>@claim.Value</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="alert alert-warning">
+                            <i class="bi bi-exclamation-triangle"></i> User is not authenticated.
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Permission Tests</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6>Permission Claims:</h6>
+                            <ul class="list-group">
+                                <li class="list-group-item d-flex justify-content-between">
+                                    User.Read
+                                    <span class="badge @(HasClaim("perm", "User.Read") ? "bg-success" : "bg-danger")">
+                                        @(HasClaim("perm", "User.Read") ? "YES" : "NO")
+                                    </span>
+                                </li>
+                                <li class="list-group-item d-flex justify-content-between">
+                                    User.Create
+                                    <span class="badge @(HasClaim("perm", "User.Create") ? "bg-success" : "bg-danger")">
+                                        @(HasClaim("perm", "User.Create") ? "YES" : "NO")
+                                    </span>
+                                </li>
+                                <li class="list-group-item d-flex justify-content-between">
+                                    FullAccess (*)
+                                    <span class="badge @(HasClaim("perm", "*") ? "bg-success" : "bg-danger")">
+                                        @(HasClaim("perm", "*") ? "YES" : "NO")
+                                    </span>
+                                </li>
+                            </ul>
+                        </div>
+                        <div class="col-md-6">
+                            <h6>Role Claims:</h6>
+                            <ul class="list-group">
+                                <li class="list-group-item d-flex justify-content-between">
+                                    Role
+                                    <span class="badge @(HasClaim(ClaimTypes.Role, "SuperAdmin") ? "bg-success" : "bg-danger")">
+                                        @(HasClaim(ClaimTypes.Role, "SuperAdmin") ? "YES" : "NO")
+                                    </span>
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private bool HasClaim(string claimType, string claimValue)
+    {
+        return HttpContextAccessor.HttpContext?.User?.HasClaim(claimType, claimValue) == true;
+    }
+}
+

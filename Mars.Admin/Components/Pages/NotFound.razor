@@ -1,0 +1,240 @@
+@page "/404"
+@page "/notfound"
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Web
+@inject NavigationManager NavigationManager
+@inject IJSRuntime JSRuntime
+
+@attribute [Authorize]
+
+@rendermode InteractiveServer
+@implements IDisposable
+
+<PageTitle>Page Not Found - 404</PageTitle>
+
+<div class="container-fluid min-vh-100 d-flex align-items-center justify-content-center">
+    <div class="row w-100">
+        <div class="col-12">
+            <div class="text-center">
+                <!-- 404 Animation/Icon -->
+                <div class="mb-4">
+                    <div class="display-1 text-primary mb-3">
+                        <i class="bi bi-exclamation-triangle-fill"></i>
+                    </div>
+                    <h1 class="display-4 fw-bold text-primary">404</h1>
+                </div>
+
+                <!-- Error Message -->
+                <div class="mb-4">
+                    <h2 class="h3 mb-3">Oops! Page Not Found</h2>
+                    <p class="lead text-muted mb-4">
+                        The page you're looking for doesn't exist or has been moved.
+                    </p>
+                </div>
+
+                <!-- Countdown Timer -->
+                <div class="mb-4">
+                    <div class="card border-0 shadow-sm mx-auto" style="max-width: 400px;">
+                        <div class="card-body">
+                            <h5 class="card-title text-primary">
+                                <i class="bi bi-clock"></i> Redirecting in...
+                            </h5>
+                            <div class="countdown-timer">
+                                <span class="display-6 fw-bold text-success" id="countdown">@countdownSeconds</span>
+                                <span class="text-muted ms-2">seconds</span>
+                            </div>
+                            <div class="progress mt-3" style="height: 8px;">
+                                <div class="progress-bar bg-success" role="progressbar" 
+                                     style="width: @((countdownSeconds * 100 / 15))%" 
+                                     aria-valuenow="@countdownSeconds" 
+                                     aria-valuemin="0" 
+                                     aria-valuemax="15">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Action Buttons -->
+                <div class="mb-4">
+                    <div class="d-flex flex-column flex-md-row gap-3 justify-content-center">
+                        <button class="btn btn-primary btn-lg px-4" @onclick="GoHome">
+                            <i class="bi bi-house-door"></i> Go Home
+                        </button>
+                        <button class="btn btn-outline-secondary btn-lg px-4" @onclick="GoBack">
+                            <i class="bi bi-arrow-left"></i> Go Back
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Helpful Links -->
+                <div class="mt-5">
+                    <h6 class="text-muted mb-3">Quick Links</h6>
+                    <div class="d-flex flex-wrap gap-2 justify-content-center">
+                        <a href="/" class="btn btn-outline-primary btn-sm">
+                            <i class="bi bi-house"></i> Home
+                        </a>
+                        <a href="/admin/users" class="btn btn-outline-secondary btn-sm">
+                            <i class="bi bi-people"></i> Users
+                        </a>
+                        <a href="/admin/roles" class="btn btn-outline-secondary btn-sm">
+                            <i class="bi bi-person-badge"></i> Roles
+                        </a>
+                        <a href="/quotes" class="btn btn-outline-success btn-sm">
+                            <i class="bi bi-file-text"></i> Quotes
+                        </a>
+                        <a href="/policies" class="btn btn-outline-dark btn-sm">
+                            <i class="bi bi-file-earmark-text"></i> Policies
+                        </a>
+                    </div>
+                </div>
+
+                <!-- Additional Help -->
+                <div class="mt-4">
+                    <small class="text-muted">
+                        If you believe this is an error, please contact your system administrator.
+                    </small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .countdown-timer {
+        animation: pulse 1s infinite;
+    }
+
+    @@keyframes pulse {
+        0% { transform: scale(1); }
+        50% { transform: scale(1.05); }
+        100% { transform: scale(1); }
+    }
+
+    .progress-bar {
+        transition: width 1s ease-in-out;
+    }
+
+    .min-vh-100 {
+        min-height: 100vh;
+    }
+</style>
+
+@code {
+    private int countdownSeconds = 15;
+    private Timer? countdownTimer;
+    private bool isRedirecting = false;
+    private bool isDisposed = false;
+    private string? referrerUrl;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Get the referrer URL from the browser
+        try
+        {
+            referrerUrl = await JSRuntime.InvokeAsync<string>("eval", "document.referrer");
+        }
+        catch
+        {
+            referrerUrl = null;
+        }
+
+        // Start the countdown timer
+        StartCountdown();
+    }
+
+    private void StartCountdown()
+    {
+        countdownTimer = new Timer(async _ =>
+        {
+            try
+            {
+                await InvokeAsync(() =>
+                {
+                    if (isDisposed || isRedirecting) return;
+
+                    countdownSeconds--;
+                    StateHasChanged();
+
+                    if (countdownSeconds <= 0 && !isRedirecting)
+                    {
+                        isRedirecting = true;
+                        GoHome();
+                    }
+                });
+            }
+            catch (ObjectDisposedException)
+            {
+                // Component was disposed, ignore
+            }
+            catch (Exception)
+            {
+                // Other errors, stop the timer
+                countdownTimer?.Dispose();
+            }
+        }, null, TimeSpan.Zero, TimeSpan.FromSeconds(1));
+    }
+
+    private void GoHome()
+    {
+        if (isDisposed) return;
+        
+        try
+        {
+            countdownTimer?.Dispose();
+            NavigationManager.NavigateTo("/", forceLoad: true);
+        }
+        catch (Exception)
+        {
+            // If navigation fails, try a different approach
+            try
+            {
+                JSRuntime.InvokeVoidAsync("window.location.href = '/'");
+            }
+            catch
+            {
+                // Last resort - do nothing
+            }
+        }
+    }
+
+    private void GoBack()
+    {
+        if (isDisposed) return;
+        
+        try
+        {
+            countdownTimer?.Dispose();
+            
+            // Try to go back to referrer, fallback to home
+            if (!string.IsNullOrEmpty(referrerUrl) && 
+                !referrerUrl.Contains("404") && 
+                !referrerUrl.Contains("notfound"))
+            {
+                NavigationManager.NavigateTo(referrerUrl, forceLoad: true);
+            }
+            else
+            {
+                NavigationManager.NavigateTo("/", forceLoad: true);
+            }
+        }
+        catch (Exception)
+        {
+            // If navigation fails, try a different approach
+            try
+            {
+                JSRuntime.InvokeVoidAsync("window.location.href = '/'");
+            }
+            catch
+            {
+                // Last resort - do nothing
+            }
+        }
+    }
+
+    public void Dispose()
+    {
+        isDisposed = true;
+        countdownTimer?.Dispose();
+    }
+}

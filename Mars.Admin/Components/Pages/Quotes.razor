@@ -1,0 +1,465 @@
+@page "/quotes"
+@using Mars.Admin.Services
+@using Mars.Admin.Data
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.EntityFrameworkCore
+@inject IUserScope UserScope
+@inject ApplicationDbContext DbContext
+@attribute [Authorize(Policy = "Quotes.Read")]
+
+@rendermode InteractiveServer
+
+<PageTitle>Insurance Quotes</PageTitle>
+
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <h2><i class="bi bi-file-text"></i> Insurance Quotes</h2>
+            <p class="text-muted">View insurance quotes from your assigned websites</p>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Your Website Access</h5>
+                </div>
+                <div class="card-body">
+                    @if (isLoadingWebsites)
+                    {
+                        <div class="text-center">
+                            <div class="spinner-border spinner-border-sm" role="status">
+                                <span class="visually-hidden">Loading websites...</span>
+                            </div>
+                            <p class="text-muted mt-2">Loading your website access...</p>
+                        </div>
+                    }
+                    else if (UserScope.IsSuperAdmin)
+                    {
+                        <div class="alert alert-primary">
+                            <i class="bi bi-award"></i> <strong>Super Administrator</strong><br>
+                            You have access to quotes from all websites in the system.
+                        </div>
+                        <div class="row">
+                            @foreach (var website in userWebsites)
+                            {
+                                <div class="col-md-4 mb-2">
+                                    <span class="badge bg-primary me-2">@website.Code</span>
+                                    <small class="text-muted">@website.Name</small>
+                                </div>
+                            }
+                        </div>
+                    }
+                    else if (userWebsites.Count == 0)
+                    {
+                        <div class="alert alert-warning">
+                            <i class="bi bi-exclamation-triangle"></i> No website access granted.
+                            <br><small class="text-muted">Contact your administrator to assign website access.</small>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="alert alert-success">
+                            <i class="bi bi-check-circle"></i> You have access to quotes from the following websites:
+                        </div>
+                        <div class="row">
+                            @foreach (var website in userWebsites)
+                            {
+                                <div class="col-md-4 mb-2">
+                                    <span class="badge bg-success me-2">@website.Code</span>
+                                    <small class="text-muted">@website.Name</small>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @if (!isLoadingWebsites && userWebsites.Count > 0)
+    {
+        <div class="row mt-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">Recent Quotes</h5>
+                        <span class="badge bg-info">@dummyQuotes.Count quotes found</span>
+                    </div>
+                    <div class="card-body">
+                        @if (dummyQuotes.Any())
+                        {
+                            <div class="row">
+                                @foreach (var quote in dummyQuotes)
+                                {
+                                    <div class="col-md-4 mb-3">
+                                        <div class="card h-100 border-start border-4 @GetQuoteBorderColor(quote.WebsiteCode)">
+                                            <div class="card-header d-flex justify-content-between align-items-center">
+                                                <span class="badge @GetQuoteBadgeColor(quote.WebsiteCode)">@quote.WebsiteCode</span>
+                                                <small class="text-muted">@quote.DateCreated.ToString("MMM dd, yyyy")</small>
+                                            </div>
+                                            <div class="card-body">
+                                                <h6 class="card-title">@quote.CustomerName</h6>
+                                                <p class="card-text">
+                                                    <strong>Vehicle:</strong> @quote.VehicleMake @quote.VehicleModel<br>
+                                                    <strong>Cover Type:</strong> @quote.CoverType<br>
+                                                    <strong>Premium:</strong> <span class="text-success fw-bold">£@quote.Premium.ToString("N2")</span>
+                                                </p>
+                                                <div class="d-flex justify-content-between align-items-center">
+                                                    <span class="badge @GetStatusBadgeColor(quote.Status)">@quote.Status</span>
+                                                    <button class="btn btn-sm btn-outline-primary" @onclick="() => ViewQuote(quote.Id)">
+                                                        <i class="bi bi-eye"></i> View
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="text-center py-4">
+                                <i class="bi bi-inbox display-4 text-muted"></i>
+                                <p class="text-muted mt-2">No quotes available</p>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+<!-- Quote Details Modal -->
+@if (showQuoteModal && selectedQuote != null)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-file-text"></i> Quote Details</h5>
+                    <button type="button" class="btn-close" @onclick="CloseQuoteModal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6>Customer Information</h6>
+                            <table class="table table-sm">
+                                <tr>
+                                    <td><strong>Name:</strong></td>
+                                    <td>@selectedQuote.CustomerName</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Email:</strong></td>
+                                    <td>@selectedQuote.CustomerEmail</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Phone:</strong></td>
+                                    <td>@selectedQuote.CustomerPhone</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Age:</strong></td>
+                                    <td>@selectedQuote.CustomerAge years</td>
+                                </tr>
+                            </table>
+                        </div>
+                        <div class="col-md-6">
+                            <h6>Vehicle Information</h6>
+                            <table class="table table-sm">
+                                <tr>
+                                    <td><strong>Make:</strong></td>
+                                    <td>@selectedQuote.VehicleMake</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Model:</strong></td>
+                                    <td>@selectedQuote.VehicleModel</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Year:</strong></td>
+                                    <td>@selectedQuote.VehicleYear</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Engine Size:</strong></td>
+                                    <td>@selectedQuote.EngineSize cc</td>
+                                </tr>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="row mt-3">
+                        <div class="col-md-6">
+                            <h6>Cover Details</h6>
+                            <table class="table table-sm">
+                                <tr>
+                                    <td><strong>Cover Type:</strong></td>
+                                    <td>@selectedQuote.CoverType</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Excess:</strong></td>
+                                    <td>£@selectedQuote.Excess.ToString("N2")</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Mileage:</strong></td>
+                                    <td>@selectedQuote.AnnualMileage miles/year</td>
+                                </tr>
+                            </table>
+                        </div>
+                        <div class="col-md-6">
+                            <h6>Quote Information</h6>
+                            <table class="table table-sm">
+                                <tr>
+                                    <td><strong>Premium:</strong></td>
+                                    <td><span class="text-success fw-bold">£@selectedQuote.Premium.ToString("N2")</span></td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Status:</strong></td>
+                                    <td><span class="badge @GetStatusBadgeColor(selectedQuote.Status)">@selectedQuote.Status</span></td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Created:</strong></td>
+                                    <td>@selectedQuote.DateCreated.ToString("MMM dd, yyyy HH:mm")</td>
+                                </tr>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseQuoteModal">Close</button>
+                    <button type="button" class="btn btn-primary">
+                        <i class="bi bi-download"></i> Download Quote
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<WebsiteInfo> userWebsites = new();
+    private List<DummyQuote> dummyQuotes = new();
+    private bool isLoadingWebsites = true;
+    private bool showQuoteModal = false;
+    private DummyQuote? selectedQuote = null;
+
+    public class DummyQuote
+    {
+        public int Id { get; set; }
+        public string WebsiteCode { get; set; } = string.Empty;
+        public string CustomerName { get; set; } = string.Empty;
+        public string CustomerEmail { get; set; } = string.Empty;
+        public string CustomerPhone { get; set; } = string.Empty;
+        public int CustomerAge { get; set; }
+        public string VehicleMake { get; set; } = string.Empty;
+        public string VehicleModel { get; set; } = string.Empty;
+        public int VehicleYear { get; set; }
+        public int EngineSize { get; set; }
+        public string CoverType { get; set; } = string.Empty;
+        public decimal Premium { get; set; }
+        public decimal Excess { get; set; }
+        public int AnnualMileage { get; set; }
+        public string Status { get; set; } = string.Empty;
+        public DateTime DateCreated { get; set; }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadUserWebsites();
+        GenerateDummyQuotes();
+    }
+
+    private async Task LoadUserWebsites()
+    {
+        try
+        {
+            isLoadingWebsites = true;
+            userWebsites.Clear();
+
+            if (UserScope.IsSuperAdmin)
+            {
+                // Super admin has access to all websites
+                userWebsites = await DbContext.Websites
+                    .Where(w => w.IsActive)
+                    .Select(w => new WebsiteInfo
+                    {
+                        Id = w.Id,
+                        Code = w.Code,
+                        Name = w.Name,
+                        Url = w.Url
+                    })
+                    .OrderBy(w => w.Code)
+                    .ToListAsync();
+            }
+            else
+            {
+                // Load websites from user's website access
+                var userId = UserScope.UserId;
+                if (!string.IsNullOrEmpty(userId))
+                {
+                    userWebsites = await DbContext.UserWebsiteAccesses
+                        .Include(uwa => uwa.Website)
+                        .Where(uwa => uwa.UserId == userId 
+                                   && uwa.IsActive 
+                                   && uwa.IsGranted
+                                   && uwa.Website.IsActive)
+                        .Select(uwa => new WebsiteInfo
+                        {
+                            Id = uwa.Website.Id,
+                            Code = uwa.Website.Code,
+                            Name = uwa.Website.Name,
+                            Url = uwa.Website.Url
+                        })
+                        .OrderBy(w => w.Code)
+                        .ToListAsync();
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading user websites: {ex.Message}");
+        }
+        finally
+        {
+            isLoadingWebsites = false;
+        }
+    }
+
+    private void GenerateDummyQuotes()
+    {
+        dummyQuotes.Clear();
+        var random = new Random();
+        var quoteId = 1;
+
+        // Generate 3 quotes per website
+        foreach (var website in userWebsites)
+        {
+            for (int i = 0; i < 3; i++)
+            {
+                var quote = new DummyQuote
+                {
+                    Id = quoteId++,
+                    WebsiteCode = website.Code,
+                    CustomerName = GetRandomCustomerName(random),
+                    CustomerEmail = GetRandomEmail(random),
+                    CustomerPhone = GetRandomPhone(random),
+                    CustomerAge = random.Next(18, 75),
+                    VehicleMake = GetRandomVehicleMake(random),
+                    VehicleModel = GetRandomVehicleModel(random),
+                    VehicleYear = random.Next(2015, 2024),
+                    EngineSize = GetRandomEngineSize(random),
+                    CoverType = GetRandomCoverType(random),
+                    Premium = random.Next(200, 2000),
+                    Excess = random.Next(100, 500),
+                    AnnualMileage = random.Next(5000, 25000),
+                    Status = GetRandomStatus(random),
+                    DateCreated = DateTime.Now.AddDays(-random.Next(1, 30))
+                };
+                dummyQuotes.Add(quote);
+            }
+        }
+
+        // Sort by date created (newest first)
+        dummyQuotes = dummyQuotes.OrderByDescending(q => q.DateCreated).ToList();
+    }
+
+    private string GetRandomCustomerName(Random random)
+    {
+        var firstNames = new[] { "John", "Sarah", "Michael", "Emma", "David", "Lisa", "James", "Anna", "Robert", "Maria", "William", "Sophie", "Thomas", "Emily", "Christopher", "Jessica" };
+        var lastNames = new[] { "Smith", "Johnson", "Williams", "Brown", "Jones", "Garcia", "Miller", "Davis", "Rodriguez", "Martinez", "Hernandez", "Lopez", "Gonzalez", "Wilson", "Anderson", "Taylor" };
+        return $"{firstNames[random.Next(firstNames.Length)]} {lastNames[random.Next(lastNames.Length)]}";
+    }
+
+    private string GetRandomEmail(Random random)
+    {
+        var domains = new[] { "gmail.com", "yahoo.com", "hotmail.com", "outlook.com", "icloud.com" };
+        var names = new[] { "john", "sarah", "mike", "emma", "david", "lisa", "james", "anna", "rob", "maria" };
+        return $"{names[random.Next(names.Length)]}{random.Next(100, 999)}@{domains[random.Next(domains.Length)]}";
+    }
+
+    private string GetRandomPhone(Random random)
+    {
+        return $"07{random.Next(100000000, 999999999)}";
+    }
+
+    private string GetRandomVehicleMake(Random random)
+    {
+        var makes = new[] { "Ford", "BMW", "Audi", "Mercedes", "Volkswagen", "Toyota", "Honda", "Nissan", "Hyundai", "Kia", "Peugeot", "Renault", "Vauxhall", "Skoda", "SEAT" };
+        return makes[random.Next(makes.Length)];
+    }
+
+    private string GetRandomVehicleModel(Random random)
+    {
+        var models = new[] { "Focus", "Golf", "A3", "C-Class", "Civic", "Corolla", "Passat", "Mondeo", "Insignia", "Megane", "308", "Leon", "Octavia", "i30", "Ceed" };
+        return models[random.Next(models.Length)];
+    }
+
+    private int GetRandomEngineSize(Random random)
+    {
+        var engineSizes = new[] { 1000, 1200, 1400, 1600, 1800, 2000, 2200, 2500, 3000, 3500 };
+        return engineSizes[random.Next(engineSizes.Length)];
+    }
+
+    private string GetRandomCoverType(Random random)
+    {
+        var coverTypes = new[] { "Comprehensive", "Third Party", "Third Party Fire & Theft", "Fully Comprehensive" };
+        return coverTypes[random.Next(coverTypes.Length)];
+    }
+
+    private string GetRandomStatus(Random random)
+    {
+        var statuses = new[] { "Active", "Pending", "Expired", "Accepted", "Declined" };
+        return statuses[random.Next(statuses.Length)];
+    }
+
+    private string GetQuoteBorderColor(string websiteCode)
+    {
+        return websiteCode switch
+        {
+            "ID" => "border-primary",
+            "SI" => "border-success", 
+            "ILD" => "border-warning",
+            _ => "border-secondary"
+        };
+    }
+
+    private string GetQuoteBadgeColor(string websiteCode)
+    {
+        return websiteCode switch
+        {
+            "ID" => "bg-primary",
+            "SI" => "bg-success",
+            "ILD" => "bg-warning",
+            _ => "bg-secondary"
+        };
+    }
+
+    private string GetStatusBadgeColor(string status)
+    {
+        return status switch
+        {
+            "Active" => "bg-success",
+            "Pending" => "bg-warning",
+            "Expired" => "bg-secondary",
+            "Accepted" => "bg-primary",
+            "Declined" => "bg-danger",
+            _ => "bg-secondary"
+        };
+    }
+
+    private void ViewQuote(int quoteId)
+    {
+        selectedQuote = dummyQuotes.FirstOrDefault(q => q.Id == quoteId);
+        if (selectedQuote != null)
+        {
+            showQuoteModal = true;
+            StateHasChanged();
+        }
+    }
+
+    private void CloseQuoteModal()
+    {
+        showQuoteModal = false;
+        selectedQuote = null;
+        StateHasChanged();
+    }
+}

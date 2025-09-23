@@ -1,4 +1,4 @@
-﻿@page "/"
+@page "/dashboard"
 @using Mars.Admin.Services
 @using Mars.Admin.Data
 @using Microsoft.AspNetCore.Authorization
@@ -7,9 +7,7 @@
 @inject ApplicationDbContext DbContext
 @attribute [Authorize]
 
-@rendermode InteractiveServer
-
-<PageTitle>Home</PageTitle>
+<PageTitle>Dashboard</PageTitle>
 
 <div class="container-fluid">
     <div class="row">

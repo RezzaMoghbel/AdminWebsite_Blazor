@@ -1,0 +1,494 @@
+@page "/policies"
+@using Mars.Admin.Services
+@using Mars.Admin.Data
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.EntityFrameworkCore
+@inject IUserScope UserScope
+@inject ApplicationDbContext DbContext
+@attribute [Authorize(Policy = "Policies.Read")]
+
+@rendermode InteractiveServer
+
+<PageTitle>Insurance Policies</PageTitle>
+
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <h2><i class="bi bi-file-earmark-text"></i> Insurance Policies</h2>
+            <p class="text-muted">View insurance policies from your assigned websites</p>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Your Website Access</h5>
+                </div>
+                <div class="card-body">
+                    @if (isLoadingWebsites)
+                    {
+                        <div class="text-center">
+                            <div class="spinner-border spinner-border-sm" role="status">
+                                <span class="visually-hidden">Loading websites...</span>
+                            </div>
+                            <p class="text-muted mt-2">Loading your website access...</p>
+                        </div>
+                    }
+                    else if (UserScope.IsSuperAdmin)
+                    {
+                        <div class="alert alert-primary">
+                            <i class="bi bi-award"></i> <strong>Super Administrator</strong><br>
+                            You have access to policies from all websites in the system.
+                        </div>
+                        <div class="row">
+                            @foreach (var website in userWebsites)
+                            {
+                                <div class="col-md-4 mb-2">
+                                    <span class="badge bg-primary me-2">@website.Code</span>
+                                    <small class="text-muted">@website.Name</small>
+                                </div>
+                            }
+                        </div>
+                    }
+                    else if (userWebsites.Count == 0)
+                    {
+                        <div class="alert alert-warning">
+                            <i class="bi bi-exclamation-triangle"></i> No website access granted.
+                            <br><small class="text-muted">Contact your administrator to assign website access.</small>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="alert alert-success">
+                            <i class="bi bi-check-circle"></i> You have access to policies from the following websites:
+                        </div>
+                        <div class="row">
+                            @foreach (var website in userWebsites)
+                            {
+                                <div class="col-md-4 mb-2">
+                                    <span class="badge bg-success me-2">@website.Code</span>
+                                    <small class="text-muted">@website.Name</small>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @if (!isLoadingWebsites && userWebsites.Count > 0)
+    {
+        <div class="row mt-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">Active Policies</h5>
+                        <span class="badge bg-info">@dummyPolicies.Count policies found</span>
+                    </div>
+                    <div class="card-body">
+                        @if (dummyPolicies.Any())
+                        {
+                            <div class="row">
+                                @foreach (var policy in dummyPolicies)
+                                {
+                                    <div class="col-md-4 mb-3">
+                                        <div class="card h-100 border-start border-4 @GetPolicyBorderColor(policy.WebsiteCode)">
+                                            <div class="card-header d-flex justify-content-between align-items-center">
+                                                <span class="badge @GetPolicyBadgeColor(policy.WebsiteCode)">@policy.WebsiteCode</span>
+                                                <small class="text-muted">Policy #@policy.PolicyNumber</small>
+                                            </div>
+                                            <div class="card-body">
+                                                <h6 class="card-title">@policy.CustomerName</h6>
+                                                <p class="card-text">
+                                                    <strong>Vehicle:</strong> @policy.VehicleMake @policy.VehicleModel<br>
+                                                    <strong>Cover:</strong> @policy.CoverType<br>
+                                                    <strong>Premium:</strong> <span class="text-success fw-bold">£@policy.Premium.ToString("N2")</span><br>
+                                                    <strong>Valid Until:</strong> @policy.ExpiryDate.ToString("MMM dd, yyyy")
+                                                </p>
+                                                <div class="d-flex justify-content-between align-items-center">
+                                                    <span class="badge @GetPolicyStatusBadgeColor(policy.Status)">@policy.Status</span>
+                                                    <button class="btn btn-sm btn-outline-primary" @onclick="() => ViewPolicy(policy.Id)">
+                                                        <i class="bi bi-eye"></i> View
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="text-center py-4">
+                                <i class="bi bi-inbox display-4 text-muted"></i>
+                                <p class="text-muted mt-2">No policies available</p>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+<!-- Policy Details Modal -->
+@if (showPolicyModal && selectedPolicy != null)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-file-earmark-text"></i> Policy Details</h5>
+                    <button type="button" class="btn-close" @onclick="ClosePolicyModal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6>Policy Information</h6>
+                            <table class="table table-sm">
+                                <tr>
+                                    <td><strong>Policy Number:</strong></td>
+                                    <td>@selectedPolicy.PolicyNumber</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Status:</strong></td>
+                                    <td><span class="badge @GetPolicyStatusBadgeColor(selectedPolicy.Status)">@selectedPolicy.Status</span></td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Start Date:</strong></td>
+                                    <td>@selectedPolicy.StartDate.ToString("MMM dd, yyyy")</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Expiry Date:</strong></td>
+                                    <td>@selectedPolicy.ExpiryDate.ToString("MMM dd, yyyy")</td>
+                                </tr>
+                            </table>
+                        </div>
+                        <div class="col-md-6">
+                            <h6>Customer Information</h6>
+                            <table class="table table-sm">
+                                <tr>
+                                    <td><strong>Name:</strong></td>
+                                    <td>@selectedPolicy.CustomerName</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Email:</strong></td>
+                                    <td>@selectedPolicy.CustomerEmail</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Phone:</strong></td>
+                                    <td>@selectedPolicy.CustomerPhone</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Address:</strong></td>
+                                    <td>@selectedPolicy.CustomerAddress</td>
+                                </tr>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="row mt-3">
+                        <div class="col-md-6">
+                            <h6>Vehicle Information</h6>
+                            <table class="table table-sm">
+                                <tr>
+                                    <td><strong>Make:</strong></td>
+                                    <td>@selectedPolicy.VehicleMake</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Model:</strong></td>
+                                    <td>@selectedPolicy.VehicleModel</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Year:</strong></td>
+                                    <td>@selectedPolicy.VehicleYear</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Registration:</strong></td>
+                                    <td>@selectedPolicy.VehicleRegistration</td>
+                                </tr>
+                            </table>
+                        </div>
+                        <div class="col-md-6">
+                            <h6>Cover Details</h6>
+                            <table class="table table-sm">
+                                <tr>
+                                    <td><strong>Cover Type:</strong></td>
+                                    <td>@selectedPolicy.CoverType</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Premium:</strong></td>
+                                    <td><span class="text-success fw-bold">£@selectedPolicy.Premium.ToString("N2")</span></td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Excess:</strong></td>
+                                    <td>£@selectedPolicy.Excess.ToString("N2")</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>No Claims Bonus:</strong></td>
+                                    <td>@selectedPolicy.NoClaimsBonus years</td>
+                                </tr>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="ClosePolicyModal">Close</button>
+                    <button type="button" class="btn btn-primary">
+                        <i class="bi bi-download"></i> Download Policy
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<WebsiteInfo> userWebsites = new();
+    private List<DummyPolicy> dummyPolicies = new();
+    private bool isLoadingWebsites = true;
+    private bool showPolicyModal = false;
+    private DummyPolicy? selectedPolicy = null;
+
+    public class DummyPolicy
+    {
+        public int Id { get; set; }
+        public string WebsiteCode { get; set; } = string.Empty;
+        public string PolicyNumber { get; set; } = string.Empty;
+        public string CustomerName { get; set; } = string.Empty;
+        public string CustomerEmail { get; set; } = string.Empty;
+        public string CustomerPhone { get; set; } = string.Empty;
+        public string CustomerAddress { get; set; } = string.Empty;
+        public string VehicleMake { get; set; } = string.Empty;
+        public string VehicleModel { get; set; } = string.Empty;
+        public int VehicleYear { get; set; }
+        public string VehicleRegistration { get; set; } = string.Empty;
+        public string CoverType { get; set; } = string.Empty;
+        public decimal Premium { get; set; }
+        public decimal Excess { get; set; }
+        public int NoClaimsBonus { get; set; }
+        public string Status { get; set; } = string.Empty;
+        public DateTime StartDate { get; set; }
+        public DateTime ExpiryDate { get; set; }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadUserWebsites();
+        GenerateDummyPolicies();
+    }
+
+    private async Task LoadUserWebsites()
+    {
+        try
+        {
+            isLoadingWebsites = true;
+            userWebsites.Clear();
+
+            if (UserScope.IsSuperAdmin)
+            {
+                // Super admin has access to all websites
+                userWebsites = await DbContext.Websites
+                    .Where(w => w.IsActive)
+                    .Select(w => new WebsiteInfo
+                    {
+                        Id = w.Id,
+                        Code = w.Code,
+                        Name = w.Name,
+                        Url = w.Url
+                    })
+                    .OrderBy(w => w.Code)
+                    .ToListAsync();
+            }
+            else
+            {
+                // Load websites from user's website access
+                var userId = UserScope.UserId;
+                if (!string.IsNullOrEmpty(userId))
+                {
+                    userWebsites = await DbContext.UserWebsiteAccesses
+                        .Include(uwa => uwa.Website)
+                        .Where(uwa => uwa.UserId == userId 
+                                   && uwa.IsActive 
+                                   && uwa.IsGranted
+                                   && uwa.Website.IsActive)
+                        .Select(uwa => new WebsiteInfo
+                        {
+                            Id = uwa.Website.Id,
+                            Code = uwa.Website.Code,
+                            Name = uwa.Website.Name,
+                            Url = uwa.Website.Url
+                        })
+                        .OrderBy(w => w.Code)
+                        .ToListAsync();
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading user websites: {ex.Message}");
+        }
+        finally
+        {
+            isLoadingWebsites = false;
+        }
+    }
+
+    private void GenerateDummyPolicies()
+    {
+        dummyPolicies.Clear();
+        var random = new Random();
+        var policyId = 1;
+
+        // Generate 3 policies per website
+        foreach (var website in userWebsites)
+        {
+            for (int i = 0; i < 3; i++)
+            {
+                var startDate = DateTime.Now.AddDays(-random.Next(30, 365));
+                var expiryDate = startDate.AddYears(1);
+                
+                var policy = new DummyPolicy
+                {
+                    Id = policyId++,
+                    WebsiteCode = website.Code,
+                    PolicyNumber = $"POL{website.Code}{random.Next(100000, 999999)}",
+                    CustomerName = GetRandomCustomerName(random),
+                    CustomerEmail = GetRandomEmail(random),
+                    CustomerPhone = GetRandomPhone(random),
+                    CustomerAddress = GetRandomAddress(random),
+                    VehicleMake = GetRandomVehicleMake(random),
+                    VehicleModel = GetRandomVehicleModel(random),
+                    VehicleYear = random.Next(2015, 2024),
+                    VehicleRegistration = GetRandomRegistration(random),
+                    CoverType = GetRandomCoverType(random),
+                    Premium = random.Next(300, 2500),
+                    Excess = random.Next(100, 500),
+                    NoClaimsBonus = random.Next(0, 9),
+                    Status = GetRandomPolicyStatus(random),
+                    StartDate = startDate,
+                    ExpiryDate = expiryDate
+                };
+                dummyPolicies.Add(policy);
+            }
+        }
+
+        // Sort by expiry date (soonest first)
+        dummyPolicies = dummyPolicies.OrderBy(p => p.ExpiryDate).ToList();
+    }
+
+    private string GetRandomCustomerName(Random random)
+    {
+        var firstNames = new[] { "John", "Sarah", "Michael", "Emma", "David", "Lisa", "James", "Anna", "Robert", "Maria", "William", "Sophie", "Thomas", "Emily", "Christopher", "Jessica" };
+        var lastNames = new[] { "Smith", "Johnson", "Williams", "Brown", "Jones", "Garcia", "Miller", "Davis", "Rodriguez", "Martinez", "Hernandez", "Lopez", "Gonzalez", "Wilson", "Anderson", "Taylor" };
+        return $"{firstNames[random.Next(firstNames.Length)]} {lastNames[random.Next(lastNames.Length)]}";
+    }
+
+    private string GetRandomEmail(Random random)
+    {
+        var domains = new[] { "gmail.com", "yahoo.com", "hotmail.com", "outlook.com", "icloud.com" };
+        var names = new[] { "john", "sarah", "mike", "emma", "david", "lisa", "james", "anna", "rob", "maria" };
+        return $"{names[random.Next(names.Length)]}{random.Next(100, 999)}@{domains[random.Next(domains.Length)]}";
+    }
+
+    private string GetRandomPhone(Random random)
+    {
+        return $"07{random.Next(100000000, 999999999)}";
+    }
+
+    private string GetRandomAddress(Random random)
+    {
+        var streets = new[] { "High Street", "Church Road", "Victoria Road", "Park Lane", "Mill Lane", "Station Road", "Queen Street", "King Street", "Main Street", "Oak Avenue" };
+        var cities = new[] { "London", "Manchester", "Birmingham", "Liverpool", "Leeds", "Sheffield", "Bristol", "Newcastle", "Nottingham", "Leicester" };
+        return $"{random.Next(1, 200)} {streets[random.Next(streets.Length)]}, {cities[random.Next(cities.Length)]}";
+    }
+
+    private string GetRandomVehicleMake(Random random)
+    {
+        var makes = new[] { "Ford", "BMW", "Audi", "Mercedes", "Volkswagen", "Toyota", "Honda", "Nissan", "Hyundai", "Kia", "Peugeot", "Renault", "Vauxhall", "Skoda", "SEAT" };
+        return makes[random.Next(makes.Length)];
+    }
+
+    private string GetRandomVehicleModel(Random random)
+    {
+        var models = new[] { "Focus", "Golf", "A3", "C-Class", "Civic", "Corolla", "Passat", "Mondeo", "Insignia", "Megane", "308", "Leon", "Octavia", "i30", "Ceed" };
+        return models[random.Next(models.Length)];
+    }
+
+    private string GetRandomRegistration(Random random)
+    {
+        var letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        var reg = "";
+        for (int i = 0; i < 2; i++)
+            reg += letters[random.Next(letters.Length)];
+        reg += random.Next(10, 99);
+        for (int i = 0; i < 3; i++)
+            reg += letters[random.Next(letters.Length)];
+        return reg;
+    }
+
+    private string GetRandomCoverType(Random random)
+    {
+        var coverTypes = new[] { "Comprehensive", "Third Party", "Third Party Fire & Theft", "Fully Comprehensive" };
+        return coverTypes[random.Next(coverTypes.Length)];
+    }
+
+    private string GetRandomPolicyStatus(Random random)
+    {
+        var statuses = new[] { "Active", "Expired", "Cancelled", "Suspended", "Renewed" };
+        return statuses[random.Next(statuses.Length)];
+    }
+
+    private string GetPolicyBorderColor(string websiteCode)
+    {
+        return websiteCode switch
+        {
+            "ID" => "border-primary",
+            "SI" => "border-success", 
+            "ILD" => "border-warning",
+            _ => "border-secondary"
+        };
+    }
+
+    private string GetPolicyBadgeColor(string websiteCode)
+    {
+        return websiteCode switch
+        {
+            "ID" => "bg-primary",
+            "SI" => "bg-success",
+            "ILD" => "bg-warning",
+            _ => "bg-secondary"
+        };
+    }
+
+    private string GetPolicyStatusBadgeColor(string status)
+    {
+        return status switch
+        {
+            "Active" => "bg-success",
+            "Expired" => "bg-secondary",
+            "Cancelled" => "bg-danger",
+            "Suspended" => "bg-warning",
+            "Renewed" => "bg-primary",
+            _ => "bg-secondary"
+        };
+    }
+
+    private void ViewPolicy(int policyId)
+    {
+        selectedPolicy = dummyPolicies.FirstOrDefault(p => p.Id == policyId);
+        if (selectedPolicy != null)
+        {
+            showPolicyModal = true;
+            StateHasChanged();
+        }
+    }
+
+    private void ClosePolicyModal()
+    {
+        showPolicyModal = false;
+        selectedPolicy = null;
+        StateHasChanged();
+    }
+}
