@@ -5,10 +5,13 @@
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Authorization;
 using Mars.Admin.Components;
 using Mars.Admin.Components.Account;
 using Mars.Admin.Data;
 using Mars.Admin.Data.Infrastructure;
+using Mars.Admin.Middleware;
+using Mars.Admin.Services;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Data.SqlClient;
@@ -20,7 +23,7 @@ var builder = WebApplication.CreateBuilder(args);
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
     ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found. Check appsettings.*.json, user secrets, or environment variables.");
 
-// 2) EF Core for Identity only. No app tables here — those will be Dapper later via Mars.Admin.Data.
+// 2) EF Core for Identity only. No app tables here ï¿½ those will be Dapper later via Mars.Admin.Data.
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseSqlServer(connectionString));
 
@@ -33,10 +36,24 @@ builder.Services
     {
         // I prefer confirmed accounts; tweak as needed.
         options.SignIn.RequireConfirmedAccount = true;
+        
+        // Configure password requirements to be more lenient
+        options.Password.RequireDigit = false;
+        options.Password.RequireLowercase = false;
+        options.Password.RequireNonAlphanumeric = false;
+        options.Password.RequireUppercase = false;
+        options.Password.RequiredLength = 6;
+        options.Password.RequiredUniqueChars = 0;
     })
     .AddEntityFrameworkStores<ApplicationDbContext>()
     .AddSignInManager()
     .AddDefaultTokenProviders();
+
+// 4.1) Custom claims principal factory for role-based permissions
+builder.Services.AddScoped<IUserClaimsPrincipalFactory<ApplicationUser>, CustomClaimsPrincipalFactory>();
+
+// 4.2) Custom sign-in manager to check user active/deleted status
+builder.Services.AddScoped<SignInManager<ApplicationUser>, CustomSignInManager>();
 
 // 5) Blazor + Identity plumbing (standard template bits).
 builder.Services.AddRazorComponents().AddInteractiveServerComponents();
@@ -54,7 +71,22 @@ builder.Services.AddAuthentication(options =>
 builder.Services.AddScoped<ISqlConnectionFactory, SqlConnectionFactory>();
 builder.Services.AddSingleton<IEmailSender<ApplicationUser>, IdentityNoOpEmailSender>();
 
+// 7) Role-based access control services
+builder.Services.AddScoped<IUserScope, UserScope>();
+builder.Services.AddScoped<SeedDataService>();
+
+// 8) Dynamic Authorization system
+builder.Services.AddScoped<IAuthorizationHandler, DynamicPermissionAuthorizationHandler>();
+builder.Services.AddSingleton<IAuthorizationPolicyProvider, DynamicAuthorizationPolicyProvider>();
+builder.Services.AddAuthorization();
+
+// 9) Authorization handlers
+builder.Services.AddScoped<IAuthorizationHandler, WebsiteScopeHandler>();
+
 var app = builder.Build();
+
+// Configure custom 404 page
+app.UseStatusCodePagesWithRedirects("/404?status={0}");
 
 // --- Custom startup logging (environment + DB info + connectivity test) ---
 using (var scope = app.Services.CreateScope())
@@ -76,6 +108,11 @@ using (var scope = app.Services.CreateScope())
         logger.LogInformation(" Database connection successful");
         await conn.CloseAsync();
         logger.LogInformation("---------------------------------------------------");
+
+        // Seed data
+        var seedService = scope.ServiceProvider.GetRequiredService<SeedDataService>();
+        await seedService.SeedAsync();
+        logger.LogInformation(" Seed data completed");
     }
     catch (Exception ex)
     {
@@ -97,6 +134,13 @@ else
 }
 
 app.UseHttpsRedirection();
+
+// IP Safe Listing Middleware (must be before authentication)
+app.UseMiddleware<IpSafeListingMiddleware>();
+
+app.UseAuthentication();
+app.UseAuthorization();
+
 app.UseAntiforgery();
 
 app.MapStaticAssets();
@@ -128,6 +172,14 @@ app.MapGet("/health/db", async (IConfiguration cfg) =>
             "text/plain", System.Text.Encoding.UTF8, statusCode: 503);
     }
 });
+
+// Debug endpoint to check user claims
+app.MapGet("/debug-claims", (HttpContext context) =>
+{
+    var user = context.User;
+    var claims = user.Claims.Select(c => $"{c.Type}: {c.Value}").ToList();
+    return Results.Text(string.Join("\n", claims), "text/plain");
+}).RequireAuthorization();
 
 
 // ---------------------------------------------------------------------
