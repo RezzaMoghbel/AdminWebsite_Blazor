@@ -4,6 +4,7 @@ using Mars.Admin.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Mars.Admin.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20250922205449_FixNullUserRoleId")]
+    partial class FixNullUserRoleId
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -186,6 +189,11 @@ namespace Mars.Admin.Migrations
                     b.Property<string>("ModifiedByUserId")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
                     b.Property<string>("UserId")
                         .HasColumnType("nvarchar(450)");
 
@@ -193,7 +201,10 @@ namespace Mars.Admin.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("IPSafeListings");
+                    b.ToTable("IPSafeListings", t =>
+                        {
+                            t.HasCheckConstraint("CK_IPSafeListing_Type_UserId", "(Type = 'Office' AND UserId IS NULL) OR (Type = 'Individual' AND UserId IS NOT NULL)");
+                        });
                 });
 
             modelBuilder.Entity("Mars.Admin.Data.Permission", b =>

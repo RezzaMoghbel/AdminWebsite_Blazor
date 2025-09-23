@@ -4,6 +4,7 @@ using Mars.Admin.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Mars.Admin.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20250922153420_UpdateUserEmailsToSIDomain")]
+    partial class UpdateUserEmailsToSIDomain
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -34,24 +37,11 @@ namespace Mars.Admin.Migrations
                         .IsConcurrencyToken()
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<DateTime?>("DeletedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("DeletedBy")
-                        .HasColumnType("nvarchar(max)");
-
                     b.Property<string>("Email")
-                        .IsRequired()
                         .HasMaxLength(256)
                         .HasColumnType("nvarchar(256)");
 
                     b.Property<bool>("EmailConfirmed")
-                        .HasColumnType("bit");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("bit");
-
-                    b.Property<bool>("IsDeleted")
                         .HasColumnType("bit");
 
                     b.Property<bool>("LockoutEnabled")
@@ -87,7 +77,7 @@ namespace Mars.Admin.Migrations
                         .HasMaxLength(256)
                         .HasColumnType("nvarchar(256)");
 
-                    b.Property<int>("UserRoleId")
+                    b.Property<int?>("UserRoleId")
                         .HasColumnType("int");
 
                     b.HasKey("Id");
@@ -186,6 +176,11 @@ namespace Mars.Admin.Migrations
                     b.Property<string>("ModifiedByUserId")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
                     b.Property<string>("UserId")
                         .HasColumnType("nvarchar(450)");
 
@@ -193,7 +188,10 @@ namespace Mars.Admin.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("IPSafeListings");
+                    b.ToTable("IPSafeListings", t =>
+                        {
+                            t.HasCheckConstraint("CK_IPSafeListing_Type_UserId", "(Type = 'Office' AND UserId IS NULL) OR (Type = 'Individual' AND UserId IS NOT NULL)");
+                        });
                 });
 
             modelBuilder.Entity("Mars.Admin.Data.Permission", b =>
@@ -538,8 +536,7 @@ namespace Mars.Admin.Migrations
                     b.HasOne("Mars.Admin.Data.UserRole", "UserRole")
                         .WithMany("Users")
                         .HasForeignKey("UserRoleId")
-                        .OnDelete(DeleteBehavior.SetNull)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.SetNull);
 
                     b.Navigation("UserRole");
                 });
