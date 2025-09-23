@@ -16,13 +16,71 @@
         <AuthorizeView>
             <Authorized>
                 <div class="nav-item px-3">
-                    <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
-                        <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> Home
+                    <NavLink class="nav-link" href="/" Match="NavLinkMatch.All">
+                        <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> Dashboard
                     </NavLink>
                 </div>
+                
+@*                 <AuthorizeView Policy="User.Read" Context="adminContext">
+                    <Authorized Context="adminAuthorized">
+                        <div class="nav-item px-3">
+                            <div class="nav-link">
+                                <span class="bi bi-gear-fill-nav-menu" aria-hidden="true"></span> Administration
+                            </div>
+                            <div class="nav-submenu ms-3">
+                                <div class="nav-item">
+                                    <NavLink class="nav-link" href="admin/roles">
+                                        <span class="bi bi-people-fill-nav-menu" aria-hidden="true"></span> Roles
+                                    </NavLink>
+                                </div>
+                                <div class="nav-item">
+                                    <NavLink class="nav-link" href="admin/users">
+                                        <span class="bi bi-person-fill-nav-menu" aria-hidden="true"></span> Users
+                                    </NavLink>
+                                </div>
+                                <div class="nav-item">
+                                    <NavLink class="nav-link" href="admin/permissions">
+                                        <span class="bi bi-shield-lock-nav-menu" aria-hidden="true"></span> Permissions
+                                    </NavLink>
+                                </div>
+                                <div class="nav-item">
+                                    <NavLink class="nav-link" href="admin/websites">
+                                        <span class="bi bi-globe-nav-menu" aria-hidden="true"></span> Websites
+                                    </NavLink>
+                                </div>
+                                <div class="nav-item">
+                                    <NavLink class="nav-link" href="admin/ip-safe-listing">
+                                        <span class="bi bi-shield-check-nav-menu" aria-hidden="true"></span> IP Safe Listing
+                                    </NavLink>
+                                </div>
+                            </div>
+                        </div>
+                    </Authorized>
+                </AuthorizeView>
+                
+                <AuthorizeView Policy="Quotes.Read" Context="quotesContext">
+                    <Authorized Context="quotesAuthorized">
+                        <div class="nav-item px-3">
+                            <NavLink class="nav-link" href="quotes">
+                                <span class="bi bi-file-text-nav-menu" aria-hidden="true"></span> Quotes
+                            </NavLink>
+                        </div>
+                    </Authorized>
+                </AuthorizeView>
+                
+                <AuthorizeView Policy="Policies.Read" Context="policiesContext">
+                    <Authorized Context="policiesAuthorized">
+                        <div class="nav-item px-3">
+                            <NavLink class="nav-link" href="policies">
+                                <span class="bi bi-file-earmark-text-nav-menu" aria-hidden="true"></span> Policies
+                            </NavLink>
+                        </div>
+                    </Authorized>
+                </AuthorizeView> *@
+                
                 <div class="nav-item px-3">
                     <NavLink class="nav-link" href="Account/Manage">
-                        <span class="bi bi-person-fill-nav-menu" aria-hidden="true"></span> @context.User.Identity?.Name
+                        <span class="bi bi-person-fill-nav-menu" aria-hidden="true"></span> @FormatUsername(context.User.Identity?.Name)
                     </NavLink>
                 </div>
                 <div class="nav-item px-3">
@@ -64,6 +122,34 @@
     {
         currentUrl = NavigationManager.ToBaseRelativePath(e.Location);
         StateHasChanged();
+    }
+
+    private string FormatUsername(string? username)
+    {
+        if (string.IsNullOrEmpty(username))
+            return "User";
+
+        // Split by @ to get the part before the domain
+        var emailParts = username.Split('@');
+        var localPart = emailParts[0];
+
+        // If the local part is 10 characters or less, return as is
+        if (localPart.Length <= 10)
+            return localPart;
+
+        // Check if there's a dot in the local part
+        var dotIndex = localPart.IndexOf('.');
+        
+        if (dotIndex > 0)
+        {
+            // If there's a dot, check if the part before the dot is 10 characters or less
+            var beforeDot = localPart.Substring(0, dotIndex);
+            if (beforeDot.Length <= 10)
+                return beforeDot;
+        }
+
+        // If no dot or the part before dot is more than 10 chars, truncate to 8 chars with ellipsis
+        return localPart.Length > 8 ? localPart.Substring(0, 8) + "..." : localPart;
     }
 
     public void Dispose()
