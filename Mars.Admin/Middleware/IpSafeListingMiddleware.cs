@@ -197,6 +197,6 @@ public class IpSafeListingMiddleware
 
     private void RedirectToSafelyInsured(HttpContext context)
     {
-        context.Response.Redirect("https://www.SafelyInsured.co.uk");
+        context.Response.Redirect("https://www.InsureDaily.co.uk");
     }
 }
