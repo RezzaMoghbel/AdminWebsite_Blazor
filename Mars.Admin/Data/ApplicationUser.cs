@@ -10,7 +10,6 @@ public class ApplicationUser : IdentityUser
     [EmailAddress(ErrorMessage = "Please enter a valid email address")]
     public override string? Email { get; set; }
 
-    [Required(ErrorMessage = "Role is required")]
     public int? UserRoleId { get; set; }
     public bool IsActive { get; set; } = true;
     public bool IsDeleted { get; set; } = false;

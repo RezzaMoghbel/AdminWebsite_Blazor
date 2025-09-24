@@ -35,7 +35,7 @@ public class CustomClaimsPrincipalFactory : UserClaimsPrincipalFactory<Applicati
         Console.WriteLine($"Generating claims for user: {user.Email}, UserRoleId: {user.UserRoleId}");
 
         // Add role-based permissions
-        if (user.UserRoleId.HasValue)
+        if (user.UserRoleId.HasValue && user.UserRoleId.Value > 0)
         {
             var userRole = await _context.UserRoles
                 .Include(r => r.UserRolePermissions)
