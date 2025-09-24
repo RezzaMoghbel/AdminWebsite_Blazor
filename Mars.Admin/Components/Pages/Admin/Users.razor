@@ -336,9 +336,13 @@
                     <button type="button" class="btn-close" @onclick="CloseEditModal"></button>
                 </div>
                 <div class="modal-body">
-                    <EditForm Model="@selectedUser" OnValidSubmit="UpdateUser" autocomplete="off">
+                    <EditForm Model="@selectedUser" autocomplete="off">
                         <DataAnnotationsValidator />
                         <ValidationSummary class="text-danger mb-3" />
+                        @if (!string.IsNullOrEmpty(editErrorMessage))
+                        {
+                            <div class="alert alert-danger mb-3">@editErrorMessage</div>
+                        }
                         <div class="row">
                             <div class="col-md-6 mb-3">
                                 <label class="form-label">Email Address</label>
@@ -347,8 +351,8 @@
                             </div>
                             <div class="col-md-6 mb-3">
                                 <label class="form-label">Role *</label>
-                                <InputSelect @bind-Value="selectedUser.UserRoleId" class="form-select" autocomplete="off" data-lpignore="true">
-                                    <option value="">Select a role</option>
+                                <InputSelect @bind-Value="selectedUser.UserRoleId" @onchange="OnRoleChanged" class="form-select" autocomplete="off" data-lpignore="true">
+                                    <option value="" selected disabled>Select a role</option>
                                     @foreach (var role in availableRoles)
                                     {
                                         <option value="@role.Id">@role.Name</option>
@@ -384,7 +388,7 @@
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" @onclick="CloseEditModal">Cancel</button>
-                    <button type="submit" class="btn btn-primary">
+                    <button type="button" class="btn btn-primary" @onclick="UpdateUser">
                         <i class="bi bi-check-lg"></i> Update User
                     </button>
                 </div>
@@ -511,6 +515,7 @@
     private bool showConfirmationModal = false;
     private string confirmationAction = string.Empty;
     private ApplicationUser? selectedUser = null;
+    private string? editErrorMessage = null;
     
     // Form models
     private List<UserRole> availableRoles = new();
@@ -656,6 +661,7 @@
             
             if (selectedUser != null)
             {
+                editErrorMessage = null; // Clear any previous error messages
                 showEditModal = true;
                 StateHasChanged();
             }
@@ -669,16 +675,33 @@
 
 
 
+    private void OnRoleChanged(ChangeEventArgs e)
+    {
+        // Clear error message when user selects a role
+        editErrorMessage = null;
+        StateHasChanged();
+    }
+
     private async Task UpdateUser()
     {
         try
         {
-            if (selectedUser == null) return;
+            Logger.LogInformation("UpdateUser method called");
+            
+            if (selectedUser == null) 
+            {
+                Logger.LogWarning("selectedUser is null");
+                return;
+            }
+
+            Logger.LogInformation("Updating user: {Email}, RoleId: {RoleId}", selectedUser.Email, selectedUser.UserRoleId);
 
             // Server-side validation
             if (selectedUser.UserRoleId == null || selectedUser.UserRoleId == 0)
             {
-                Logger.LogWarning("Role is required");
+                Logger.LogWarning("Role is required for user: {Email}", selectedUser.Email);
+                editErrorMessage = "Please select a role for this user.";
+                StateHasChanged();
                 return;
             }
 

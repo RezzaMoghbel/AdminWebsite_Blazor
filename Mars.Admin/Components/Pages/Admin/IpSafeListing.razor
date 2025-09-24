@@ -241,7 +241,7 @@
                     <button type="button" class="btn-close" @onclick="CloseAddModal"></button>
                 </div>
                 <div class="modal-body">
-                    <EditForm Model="@ipFormModel" OnValidSubmit="CreateIP" OnInvalidSubmit="OnInvalidSubmit" autocomplete="off" id="ipForm">
+                    <EditForm Model="@ipFormModel" OnInvalidSubmit="OnInvalidSubmit" autocomplete="off" id="ipForm">
                         <DataAnnotationsValidator />
                         <ValidationSummary class="text-danger mb-3" />
                         @if (!string.IsNullOrEmpty(addErrorMessage))
@@ -290,7 +290,7 @@
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" @onclick="CloseAddModal">Cancel</button>
-                    <button type="submit" class="btn btn-primary" form="ipForm">
+                    <button type="submit" class="btn btn-primary" form="ipForm" @onclick="CreateIP">
                         <i class="bi bi-plus-lg"></i> Add IP
                     </button>
                 </div>
@@ -403,7 +403,7 @@
                     <button type="button" class="btn-close" @onclick="CloseEditModal"></button>
                 </div>
                 <div class="modal-body">
-                    <EditForm Model="@editIPFormModel" OnValidSubmit="UpdateIP" OnInvalidSubmit="OnInvalidSubmit" autocomplete="off" id="editForm">
+                    <EditForm Model="@editIPFormModel" OnInvalidSubmit="OnInvalidSubmit" autocomplete="off" id="editForm">
                         <DataAnnotationsValidator />
                         <ValidationSummary class="text-danger mb-3" />
                         @if (!string.IsNullOrEmpty(editErrorMessage))
