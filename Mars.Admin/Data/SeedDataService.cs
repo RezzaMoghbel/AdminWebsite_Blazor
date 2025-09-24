@@ -153,7 +153,7 @@ public class SeedDataService
     {
         var websites = new[]
         {
-            new Website { Code = "ID", Name = "InsureLearnerDriver", Url = "https://www.InsureLearnerDriver.co.uk", IsActive = true },
+            new Website { Code = "ID", Name = "InsureDaily", Url = "https://www.InsureDaily.co.uk", IsActive = true },
             new Website { Code = "ILD", Name = "InsureLearnerDriver", Url = "https://www.InsureLearnerDriver.co.uk", IsActive = true },
             new Website { Code = "SI", Name = "SafelyInsured", Url = "https://www.SafelyInsured.co.uk", IsActive = true }
         };
@@ -185,14 +185,14 @@ public class SeedDataService
                 switch (website.Code)
                 {
                     case "ID":
-                        if (website.Name != "InsureLearnerDriver" || website.Url != "https://www.InsureLearnerDriver.co.uk")
+                        if (website.Name != "InsureDaily" || website.Url != "https://www.InsureDaily.co.uk")
                         {
-                            website.Name = "InsureLearnerDriver";
-                            website.Url = "https://www.InsureLearnerDriver.co.uk";
+                            website.Name = "InsureDaily";
+                            website.Url = "https://www.InsureDaily.co.uk";
                             website.ModifiedAt = DateTime.UtcNow;
                             website.ModifiedByUserId = "System";
                             updated = true;
-                            _logger.LogInformation("Updated website ID: {OldName} -> {NewName}", website.Name, "InsureLearnerDriver");
+                            _logger.LogInformation("Updated website ID: {OldName} -> {NewName}", website.Name, "InsureDaily");
                         }
                         break;
 
