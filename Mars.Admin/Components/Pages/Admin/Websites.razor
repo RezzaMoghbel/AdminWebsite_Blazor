@@ -94,13 +94,14 @@
                                 <tbody>
                                     @foreach (var website in filteredWebsites)
                                     {
-                                        var hasUsers = website.UserWebsiteAccesses?.Any() == true;
+                                        var activeUserCount = website.UserWebsiteAccesses?.Count(uwa => uwa.IsActive) ?? 0;
+                                        var hasUsers = activeUserCount > 0;
                                         <tr class="@(website.IsActive ? "" : "table-secondary opacity-75")">
                                             <td>
                                                 <strong>@website.Code</strong>
                                                 @if (hasUsers)
                                                 {
-                                                    <span class="badge bg-info ms-2" title="Assigned to @website?.UserWebsiteAccesses?.Count user(s)">Protected</span>
+                                                    <span class="badge bg-info ms-2" title="Assigned to @activeUserCount user(s)">Protected</span>
                                                 }
                                             </td>
                                             <td>@website?.Name</td>
@@ -127,7 +128,7 @@
                                                 }
                                             </td>
                                             <td>
-                                                <span class="badge bg-info">@(website.UserWebsiteAccesses?.Count ?? 0)</span>
+                                                <span class="badge bg-info">@activeUserCount</span>
                                             </td>
                                             <td>@website.CreatedAt.ToString("yyyy-MM-dd")</td>
                                             <td>
@@ -462,15 +463,15 @@
                                     {
                                         @foreach (var user in availableUsers)
                                         {
-                                            <div class="form-check mb-2">
-                                                <input class="form-check-input" 
-                                                       type="checkbox" 
-                                                       id="user_@user.Id"
-                                                       @onchange="(e) => ToggleUserAssignment(user.Id, (bool)e.Value!)"
-                                                       checked="@IsUserAssigned(user.Id)">
-                                                <label class="form-check-label" for="user_@user.Id">
+                                            <div class="d-flex justify-content-between align-items-center mb-2 p-2 border rounded">
+                                                <div>
                                                     <strong>@user.Email</strong>
-                                                </label>
+                                                </div>
+                                                <button class="btn btn-sm btn-outline-primary" 
+                                                        @onclick="() => AddUserToWebsite(user)" 
+                                                        title="Add User">
+                                                    <i class="bi bi-plus"></i>
+                                                </button>
                                             </div>
                                         }
                                     }
@@ -483,24 +484,19 @@
                             <div class="col-md-6">
                                 <h6>Assigned Users</h6>
                                 <div class="border rounded p-3" style="max-height: 400px; overflow-y: auto;">
-                                    @if (websiteUsers?.Any() == true)
+                                    @if (assignedUsers?.Any() == true)
                                     {
-                                        @foreach (var userAccess in websiteUsers.Where(ua => ua.IsActive))
+                                        @foreach (var user in assignedUsers)
                                         {
                                             <div class="d-flex justify-content-between align-items-center mb-2 p-2 border rounded">
                                                 <div>
-                                                    <strong>@userAccess.User?.Email</strong>
+                                                    <strong>@user.Email</strong>
                                                 </div>
-                                                <div class="d-flex align-items-center">
-                                                    <span class="badge @(userAccess.IsGranted ? "bg-success" : "bg-danger") me-2">
-                                                        @(userAccess.IsGranted ? "Granted" : "Denied")
-                                                    </span>
-                                                    <button class="btn btn-sm btn-outline-danger" 
-                                                            @onclick="() => RemoveUserFromWebsite(userAccess.UserId)" 
-                                                            title="Remove User">
-                                                        <i class="bi bi-x"></i>
-                                                    </button>
-                                                </div>
+                                                <button class="btn btn-sm btn-outline-danger" 
+                                                        @onclick="() => RemoveUserFromWebsite(user)" 
+                                                        title="Remove User">
+                                                    <i class="bi bi-x"></i>
+                                                </button>
                                             </div>
                                         }
                                     }
@@ -521,8 +517,94 @@
                     }
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" @onclick="CloseUserModal">Close</button>
-                    <button type="button" class="btn btn-primary" @onclick="SaveWebsiteUsers">
+                    <button type="button" class="btn btn-secondary" @onclick="AttemptCloseUserModal">Close</button>
+                    <button type="button" class="btn btn-primary" @onclick="AttemptSaveWebsiteUsers" disabled="@(!hasUnsavedUserChanges)">
+                        <i class="bi bi-check-lg"></i> Save Changes
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Unsaved User Changes Warning Modal -->
+@if (showUnsavedUserChangesModal)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="bi bi-exclamation-triangle text-warning"></i> Unsaved Changes
+                    </h5>
+                    <button type="button" class="btn-close" @onclick="CancelUnsavedUserChangesModal"></button>
+                </div>
+                <div class="modal-body">
+                    <p>You have unsaved changes to the user assignments for this website. If you close now, all changes will be lost.</p>
+                    <p class="mb-0">Are you sure you want to close without saving?</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CancelUnsavedUserChangesModal">Cancel</button>
+                    <button type="button" class="btn btn-warning" @onclick="ConfirmCloseUserModalWithoutSaving">
+                        <i class="bi bi-x-circle"></i> Close Without Saving
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Save User Confirmation Modal -->
+@if (showSaveUserConfirmationModal)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="bi bi-check-circle text-success"></i> Confirm User Assignment Changes
+                    </h5>
+                    <button type="button" class="btn-close" @onclick="CancelSaveUserConfirmationModal"></button>
+                </div>
+                <div class="modal-body">
+                    <p>You are about to save the following changes to the website <strong>@selectedWebsite?.Name</strong>:</p>
+                    
+                    @{
+                        var addedUsers = assignedUsers?.Where(u => !originalAssignedUsers?.Any(ou => ou.Id == u.Id) == true).ToList() ?? new List<ApplicationUser>();
+                        var removedUsers = originalAssignedUsers?.Where(ou => !assignedUsers?.Any(u => u.Id == ou.Id) == true).ToList() ?? new List<ApplicationUser>();
+                    }
+                    
+                    @if (addedUsers.Any())
+                    {
+                        <div class="alert alert-success">
+                            <strong>Adding users:</strong>
+                            <ul class="mb-0 mt-2">
+                                @foreach (var user in addedUsers)
+                                {
+                                    <li>@user.Email</li>
+                                }
+                            </ul>
+                        </div>
+                    }
+                    
+                    @if (removedUsers.Any())
+                    {
+                        <div class="alert alert-danger">
+                            <strong>Removing users:</strong>
+                            <ul class="mb-0 mt-2">
+                                @foreach (var user in removedUsers)
+                                {
+                                    <li>@user.Email</li>
+                                }
+                            </ul>
+                        </div>
+                    }
+                    
+                    <p class="mb-0">Do you want to proceed with these changes?</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CancelSaveUserConfirmationModal">Cancel</button>
+                    <button type="button" class="btn btn-success" @onclick="ConfirmSaveWebsiteUsers">
                         <i class="bi bi-check-lg"></i> Save Changes
                     </button>
                 </div>
@@ -561,12 +643,12 @@
                         <div class="alert alert-warning">
                             <strong>Code:</strong> @selectedWebsite.Code<br>
                             <strong>Name:</strong> @selectedWebsite.Name<br>
-                            <strong>Users:</strong> @(selectedWebsite.UserWebsiteAccesses?.Count ?? 0)
+                            <strong>Users:</strong> @(selectedWebsite.UserWebsiteAccesses?.Count(uwa => uwa.IsActive) ?? 0)
                         </div>
-                        @if (selectedWebsite.UserWebsiteAccesses?.Any() == true)
+                        @if (selectedWebsite.UserWebsiteAccesses?.Any(uwa => uwa.IsActive) == true)
                         {
                             <div class="alert alert-danger">
-                                <strong>Warning:</strong> This website is assigned to @selectedWebsite.UserWebsiteAccesses.Count user(s). 
+                                <strong>Warning:</strong> This website is assigned to @selectedWebsite.UserWebsiteAccesses.Count(uwa => uwa.IsActive) user(s). 
                                 Deactivating this website will affect all users with access to it.
                             </div>
                         }
@@ -578,7 +660,7 @@
                         <div class="alert alert-success">
                             <strong>Code:</strong> @selectedWebsite.Code<br>
                             <strong>Name:</strong> @selectedWebsite.Name<br>
-                            <strong>Users:</strong> @(selectedWebsite.UserWebsiteAccesses?.Count ?? 0)
+                            <strong>Users:</strong> @(selectedWebsite.UserWebsiteAccesses?.Count(uwa => uwa.IsActive) ?? 0)
                         </div>
                         <p class="mb-0">This action will allow this website to be used in the system.</p>
                     }
@@ -588,12 +670,12 @@
                         <div class="alert alert-danger">
                             <strong>Code:</strong> @selectedWebsite.Code<br>
                             <strong>Name:</strong> @selectedWebsite.Name<br>
-                            <strong>Users:</strong> @(selectedWebsite.UserWebsiteAccesses?.Count ?? 0)
+                            <strong>Users:</strong> @(selectedWebsite.UserWebsiteAccesses?.Count(uwa => uwa.IsActive) ?? 0)
                         </div>
-                        @if (selectedWebsite.UserWebsiteAccesses?.Any() == true)
+                        @if (selectedWebsite.UserWebsiteAccesses?.Any(uwa => uwa.IsActive) == true)
                         {
                             <div class="alert alert-danger">
-                                <strong>CRITICAL WARNING:</strong> This website is assigned to @selectedWebsite.UserWebsiteAccesses.Count user(s). 
+                                <strong>CRITICAL WARNING:</strong> This website is assigned to @selectedWebsite.UserWebsiteAccesses.Count(uwa => uwa.IsActive) user(s). 
                                 <strong>This action cannot be performed while users are assigned to this website.</strong>
                             </div>
                         }
@@ -604,7 +686,7 @@
                     <button type="button" class="btn btn-secondary" @onclick="CloseConfirmationModal">Cancel</button>
                     @if (confirmationAction == "deactivate")
                     {
-                        @if (selectedWebsite.UserWebsiteAccesses?.Any() == true)
+                        @if (selectedWebsite.UserWebsiteAccesses?.Any(uwa => uwa.IsActive) == true)
                         {
                             <button type="button" class="btn btn-warning" disabled title="Cannot deactivate website with assigned users">
                                 <i class="bi bi-pause-circle"></i> Deactivate Website
@@ -625,7 +707,7 @@
                     }
                     else if (confirmationAction == "delete")
                     {
-                        @if (selectedWebsite.UserWebsiteAccesses?.Any() == true)
+                        @if (selectedWebsite.UserWebsiteAccesses?.Any(uwa => uwa.IsActive) == true)
                         {
                             <button type="button" class="btn btn-danger" disabled title="Cannot delete website with assigned users">
                                 <i class="bi bi-trash"></i> Delete Website
@@ -665,10 +747,14 @@
     
     // User management
     private List<ApplicationUser> availableUsers = new();
-    private List<UserWebsiteAccess> websiteUsers = new();
+    private List<ApplicationUser> assignedUsers = new();
+    private List<ApplicationUser> originalAssignedUsers = new();
     private List<string> pendingUserChanges = new();
     private bool isLoadingUsers = false;
     private string? userErrorMessage = null;
+    private bool hasUnsavedUserChanges = false;
+    private bool showUnsavedUserChangesModal = false;
+    private bool showSaveUserConfirmationModal = false;
     
     // Form models
     public class WebsiteFormModel
@@ -986,6 +1072,7 @@
             isLoadingUsers = true;
             userErrorMessage = null;
             pendingUserChanges.Clear();
+            hasUnsavedUserChanges = false;
             
             // Load the selected website with its user assignments
             selectedWebsite = await DbContext.Websites
@@ -996,13 +1083,23 @@
             if (selectedWebsite != null)
             {
                 // Load all available users
-                availableUsers = await DbContext.Users
+                var allUsers = await DbContext.Users
                     .Where(u => u.IsActive && !u.IsDeleted)
                     .OrderBy(u => u.Email)
                     .ToListAsync();
                 
                 // Get current website user assignments
-                websiteUsers = selectedWebsite.UserWebsiteAccesses.ToList();
+                var currentAssignedUsers = selectedWebsite.UserWebsiteAccesses
+                    .Where(uwa => uwa.IsActive)
+                    .Select(uwa => uwa.User)
+                    .ToList();
+                
+                // Set up the user lists
+                assignedUsers = currentAssignedUsers.ToList();
+                originalAssignedUsers = currentAssignedUsers.ToList();
+                availableUsers = allUsers
+                    .Where(u => !currentAssignedUsers.Any(cu => cu.Id == u.Id))
+                    .ToList();
                 
                 showUserModal = true;
                 StateHasChanged();
@@ -1024,45 +1121,79 @@
         showUserModal = false;
         selectedWebsite = null;
         availableUsers.Clear();
-        websiteUsers.Clear();
+        assignedUsers.Clear();
+        originalAssignedUsers.Clear();
         pendingUserChanges.Clear();
         userErrorMessage = null;
+        hasUnsavedUserChanges = false;
+        showUnsavedUserChangesModal = false;
+        showSaveUserConfirmationModal = false;
         StateHasChanged();
     }
 
-    private bool IsUserAssigned(string userId)
+    private void AddUserToWebsite(ApplicationUser user)
     {
-        return websiteUsers.Any(uwa => uwa.UserId == userId && uwa.IsActive);
+        if (!assignedUsers.Any(u => u.Id == user.Id))
+        {
+            assignedUsers.Add(user);
+            availableUsers.Remove(user);
+            hasUnsavedUserChanges = true;
+            StateHasChanged();
+        }
     }
 
-    private void ToggleUserAssignment(string userId, bool isAssigned)
+    private void RemoveUserFromWebsite(ApplicationUser user)
     {
-        if (isAssigned)
+        if (assignedUsers.Any(u => u.Id == user.Id))
         {
-            // Add to pending changes if not already assigned
-            if (!IsUserAssigned(userId) && !pendingUserChanges.Contains(userId))
-            {
-                pendingUserChanges.Add(userId);
-            }
+            assignedUsers.Remove(user);
+            availableUsers.Add(user);
+            availableUsers = availableUsers.OrderBy(u => u.Email).ToList();
+            hasUnsavedUserChanges = true;
+            StateHasChanged();
+        }
+    }
+
+    private void AttemptCloseUserModal()
+    {
+        if (hasUnsavedUserChanges)
+        {
+            showUnsavedUserChangesModal = true;
         }
         else
         {
-            // Remove from pending changes if it was added
-            pendingUserChanges.Remove(userId);
+            CloseUserModal();
         }
-        StateHasChanged();
     }
 
-    private void RemoveUserFromWebsite(string userId)
+    private void CancelUnsavedUserChangesModal()
     {
-        var userAccess = websiteUsers.FirstOrDefault(uwa => uwa.UserId == userId);
-        if (userAccess != null)
+        showUnsavedUserChangesModal = false;
+    }
+
+    private void ConfirmCloseUserModalWithoutSaving()
+    {
+        showUnsavedUserChangesModal = false;
+        CloseUserModal();
+    }
+
+    private void AttemptSaveWebsiteUsers()
+    {
+        if (hasUnsavedUserChanges)
         {
-            userAccess.IsActive = false;
-            userAccess.ModifiedAt = DateTime.UtcNow;
-            userAccess.ModifiedByUserId = UserScope.UserId;
+            showSaveUserConfirmationModal = true;
         }
-        StateHasChanged();
+    }
+
+    private void CancelSaveUserConfirmationModal()
+    {
+        showSaveUserConfirmationModal = false;
+    }
+
+    private async Task ConfirmSaveWebsiteUsers()
+    {
+        showSaveUserConfirmationModal = false;
+        await SaveWebsiteUsers();
     }
 
     private async Task SaveWebsiteUsers()
@@ -1073,10 +1204,25 @@
             
             if (selectedWebsite == null) return;
 
+            // Get current user website access from database
+            var currentUserAccesses = await DbContext.UserWebsiteAccesses
+                .Where(uwa => uwa.WebsiteId == selectedWebsite.Id)
+                .ToListAsync();
+
+            // Find users to add
+            var usersToAdd = assignedUsers
+                .Where(au => !originalAssignedUsers.Any(oau => oau.Id == au.Id))
+                .ToList();
+
+            // Find users to remove
+            var usersToRemove = originalAssignedUsers
+                .Where(oau => !assignedUsers.Any(au => au.Id == oau.Id))
+                .ToList();
+
             // Add new user assignments
-            foreach (var userId in pendingUserChanges)
+            foreach (var user in usersToAdd)
             {
-                var existingUserAccess = websiteUsers.FirstOrDefault(uwa => uwa.UserId == userId);
+                var existingUserAccess = currentUserAccesses.FirstOrDefault(uwa => uwa.UserId == user.Id);
                 
                 if (existingUserAccess != null)
                 {
@@ -1091,7 +1237,7 @@
                     // Create new user website access
                     var newUserAccess = new UserWebsiteAccess
                     {
-                        UserId = userId,
+                        UserId = user.Id,
                         WebsiteId = selectedWebsite.Id,
                         IsGranted = true,
                         IsActive = true,
@@ -1100,7 +1246,18 @@
                     };
                     
                     DbContext.UserWebsiteAccesses.Add(newUserAccess);
-                    websiteUsers.Add(newUserAccess);
+                }
+            }
+
+            // Remove user assignments
+            foreach (var user in usersToRemove)
+            {
+                var userAccess = currentUserAccesses.FirstOrDefault(uwa => uwa.UserId == user.Id);
+                if (userAccess != null)
+                {
+                    userAccess.IsActive = false;
+                    userAccess.ModifiedAt = DateTime.UtcNow;
+                    userAccess.ModifiedByUserId = UserScope.UserId;
                 }
             }
 
@@ -1115,7 +1272,8 @@
             CloseUserModal();
             StateHasChanged();
 
-            Logger.LogInformation("User assignments updated for website {WebsiteCode}", websiteCode);
+            Logger.LogInformation("User assignments updated for website {WebsiteCode}. Added: {AddedCount}, Removed: {RemovedCount}", 
+                websiteCode, usersToAdd.Count, usersToRemove.Count);
         }
         catch (Exception ex)
         {
@@ -1184,9 +1342,10 @@
             if (website != null)
             {
                 // Prevent deactivation if users are assigned
-                if (!website.IsActive && website.UserWebsiteAccesses.Any())
+                var activeUserCount = website.UserWebsiteAccesses.Count(uwa => uwa.IsActive);
+                if (!website.IsActive && activeUserCount > 0)
                 {
-                    Logger.LogWarning("Cannot deactivate website {WebsiteCode} because it is assigned to {UserCount} users", website.Code, website.UserWebsiteAccesses.Count);
+                    Logger.LogWarning("Cannot deactivate website {WebsiteCode} because it is assigned to {UserCount} users", website.Code, activeUserCount);
                     return;
                 }
 
@@ -1220,9 +1379,10 @@
             if (website != null)
             {
                 // Check if website has users assigned
-                if (website.UserWebsiteAccesses.Any())
+                var activeUserCount = website.UserWebsiteAccesses.Count(uwa => uwa.IsActive);
+                if (activeUserCount > 0)
                 {
-                    Logger.LogWarning("Cannot delete website {WebsiteCode} because it is assigned to {UserCount} users", website.Code, website.UserWebsiteAccesses.Count);
+                    Logger.LogWarning("Cannot delete website {WebsiteCode} because it is assigned to {UserCount} users", website.Code, activeUserCount);
                     return;
                 }
 
@@ -1241,3 +1401,4 @@
         }
     }
 }
+
