@@ -66,7 +66,6 @@ public class SeedDataService
     {
         var permissions = new[]
         {
-            new Permission { Name = "FullAccess", Description = "Full system access", IsActive = true },
             new Permission { Name = "User.Create", Description = "Create users", IsActive = true },
             new Permission { Name = "User.Read", Description = "Read users", IsActive = true },
             new Permission { Name = "User.Update", Description = "Update users", IsActive = true },
@@ -107,8 +106,8 @@ public class SeedDataService
     {
         var rolePermissions = new Dictionary<string, string[]>
         {
-            ["SuperAdmin"] = new[] { "FullAccess", "User.Create", "User.Read", "User.Update", "User.Delete", "Role.Create", "Role.Read", "Role.Update", "Role.Delete", "Permission.Create", "Permission.Read", "Permission.Update", "Permission.Delete", "Website.Create", "Website.Read", "Website.Update", "Website.Delete", "Quotes.Read", "Policies.Read", "IPSafeListing.Create", "IPSafeListing.Read", "IPSafeListing.Update", "IPSafeListing.Delete" },
-            ["Developer"] = new[] { "FullAccess", "User.Create", "User.Read", "User.Update", "User.Delete", "Role.Create", "Role.Read", "Role.Update", "Role.Delete", "Permission.Create", "Permission.Read", "Permission.Update", "Permission.Delete", "Website.Create", "Website.Read", "Website.Update", "Website.Delete", "Quotes.Read", "Policies.Read", "IPSafeListing.Create", "IPSafeListing.Read", "IPSafeListing.Update", "IPSafeListing.Delete" },
+            ["SuperAdmin"] = new[] { "User.Create", "User.Read", "User.Update", "User.Delete", "Role.Create", "Role.Read", "Role.Update", "Role.Delete", "Permission.Create", "Permission.Read", "Permission.Update", "Permission.Delete", "Website.Create", "Website.Read", "Website.Update", "Website.Delete", "Quotes.Read", "Policies.Read", "IPSafeListing.Create", "IPSafeListing.Read", "IPSafeListing.Update", "IPSafeListing.Delete" },
+            ["Developer"] = new[] { "User.Create", "User.Read", "User.Update", "User.Delete", "Role.Create", "Role.Read", "Role.Update", "Role.Delete", "Permission.Create", "Permission.Read", "Permission.Update", "Permission.Delete", "Website.Create", "Website.Read", "Website.Update", "Website.Delete", "Quotes.Read", "Policies.Read", "IPSafeListing.Create", "IPSafeListing.Read", "IPSafeListing.Update", "IPSafeListing.Delete" },
             ["Manager"] = new[] { "User.Read", "Role.Read", "Permission.Read", "Website.Read", "Quotes.Read", "Policies.Read", "IPSafeListing.Read" },
             ["Customer Service"] = new[] { "User.Read", "Website.Read", "Quotes.Read", "Policies.Read" },
             ["Account"] = new[] { "User.Read", "Role.Read", "Permission.Read", "Website.Read", "Quotes.Read", "Policies.Read", "IPSafeListing.Read" },
