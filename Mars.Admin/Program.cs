@@ -185,3 +185,12 @@ app.MapGet("/debug-claims", (HttpContext context) =>
 // ---------------------------------------------------------------------
 
 app.Run();
+
+
+// $ Get-Process -Name "Mars.Admin" -ErrorAction SilentlyContinue | Stop-Process -Force
+// $ netstat -ano | findstr :5065
+// $ Get-Process -Name "dotnet" -ErrorAction SilentlyContinue | Where-Object {$_.ProcessName -eq "dotnet"} | Stop-Process -Force
+// $ taskkill /F /IM "dotnet.exe" 2>$null
+// $ netstat -ano | findstr :5065
+// $ Get-Process -Name "Mars.Admin" -ErrorAction SilentlyContinue
+// $ dotnet run --project Mars.Admin
