@@ -575,19 +575,19 @@
                                     {
                                         @foreach (var permission in availablePermissions)
                                         {
-                                            <div class="form-check mb-2">
-                                                <input class="form-check-input" 
-                                                       type="checkbox" 
-                                                       id="permission_@permission.Id"
-                                                       @onchange="(e) => TogglePermissionAssignment(permission.Id, (bool)e.Value!)"
-                                                       checked="@IsPermissionAssigned(permission.Id)">
-                                                <label class="form-check-label" for="permission_@permission.Id">
+                                            <div class="d-flex justify-content-between align-items-center mb-2 p-2 border rounded">
+                                                <div>
                                                     <strong>@permission.Name</strong>
                                                     @if (!string.IsNullOrEmpty(permission.Description))
                                                     {
                                                         <br><small class="text-muted">@permission.Description</small>
                                                     }
-                                                </label>
+                                                </div>
+                                                <button class="btn btn-sm btn-outline-primary" 
+                                                        @onclick="() => AddPermissionToRole(permission)" 
+                                                        title="Add Permission">
+                                                    <i class="bi bi-plus"></i>
+                                                </button>
                                             </div>
                                         }
                                     }
@@ -600,28 +600,23 @@
                             <div class="col-md-6">
                                 <h6>Assigned Permissions</h6>
                                 <div class="border rounded p-3" style="max-height: 400px; overflow-y: auto;">
-                                    @if (rolePermissions?.Any() == true)
+                                    @if (assignedPermissions?.Any() == true)
                                     {
-                                        @foreach (var rolePermission in rolePermissions.Where(rp => rp.IsActive))
+                                        @foreach (var permission in assignedPermissions)
                                         {
                                             <div class="d-flex justify-content-between align-items-center mb-2 p-2 border rounded">
                                                 <div>
-                                                    <strong>@rolePermission.Permission?.Name</strong>
-                                                    @if (!string.IsNullOrEmpty(rolePermission.Permission?.Description))
+                                                    <strong>@permission.Name</strong>
+                                                    @if (!string.IsNullOrEmpty(permission.Description))
                                                     {
-                                                        <br><small class="text-muted">@rolePermission.Permission.Description</small>
+                                                        <br><small class="text-muted">@permission.Description</small>
                                                     }
                                                 </div>
-                                                <div class="d-flex align-items-center">
-                                                    <span class="badge @(rolePermission.IsGranted ? "bg-success" : "bg-danger") me-2">
-                                                        @(rolePermission.IsGranted ? "Granted" : "Denied")
-                                                    </span>
-                                                    <button class="btn btn-sm btn-outline-danger" 
-                                                            @onclick="() => RemovePermissionFromRole(rolePermission.PermissionId)" 
-                                                            title="Remove Permission">
-                                                        <i class="bi bi-x"></i>
-                                                    </button>
-                                                </div>
+                                                <button class="btn btn-sm btn-outline-danger" 
+                                                        @onclick="() => RemovePermissionFromRole(permission)" 
+                                                        title="Remove Permission">
+                                                    <i class="bi bi-x"></i>
+                                                </button>
                                             </div>
                                         }
                                     }
@@ -642,8 +637,94 @@
                     }
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" @onclick="ClosePermissionModal">Close</button>
-                    <button type="button" class="btn btn-primary" @onclick="SaveRolePermissions">
+                    <button type="button" class="btn btn-secondary" @onclick="AttemptClosePermissionModal">Close</button>
+                    <button type="button" class="btn btn-primary" @onclick="AttemptSaveRolePermissions" disabled="@(!hasUnsavedChanges)">
+                        <i class="bi bi-check-lg"></i> Save Changes
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Unsaved Changes Warning Modal -->
+@if (showUnsavedChangesModal)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="bi bi-exclamation-triangle text-warning"></i> Unsaved Changes
+                    </h5>
+                    <button type="button" class="btn-close" @onclick="CancelUnsavedChangesModal"></button>
+                </div>
+                <div class="modal-body">
+                    <p>You have unsaved changes to the permissions for this role. If you close now, all changes will be lost.</p>
+                    <p class="mb-0">Are you sure you want to close without saving?</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CancelUnsavedChangesModal">Cancel</button>
+                    <button type="button" class="btn btn-warning" @onclick="ConfirmCloseWithoutSaving">
+                        <i class="bi bi-x-circle"></i> Close Without Saving
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Save Confirmation Modal -->
+@if (showSaveConfirmationModal)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="bi bi-check-circle text-success"></i> Confirm Permission Changes
+                    </h5>
+                    <button type="button" class="btn-close" @onclick="CancelSaveConfirmationModal"></button>
+                </div>
+                <div class="modal-body">
+                    <p>You are about to save the following changes to the role <strong>@selectedRoleForPermissions?.Name</strong>:</p>
+                    
+                    @{
+                        var addedPermissions = assignedPermissions?.Where(p => !originalAssignedPermissions?.Any(op => op.Id == p.Id) == true).ToList() ?? new List<Permission>();
+                        var removedPermissions = originalAssignedPermissions?.Where(op => !assignedPermissions?.Any(p => p.Id == op.Id) == true).ToList() ?? new List<Permission>();
+                    }
+                    
+                    @if (addedPermissions.Any())
+                    {
+                        <div class="alert alert-success">
+                            <strong>Adding permissions:</strong>
+                            <ul class="mb-0 mt-2">
+                                @foreach (var permission in addedPermissions)
+                                {
+                                    <li>@permission.Name</li>
+                                }
+                            </ul>
+                        </div>
+                    }
+                    
+                    @if (removedPermissions.Any())
+                    {
+                        <div class="alert alert-danger">
+                            <strong>Removing permissions:</strong>
+                            <ul class="mb-0 mt-2">
+                                @foreach (var permission in removedPermissions)
+                                {
+                                    <li>@permission.Name</li>
+                                }
+                            </ul>
+                        </div>
+                    }
+                    
+                    <p class="mb-0">Do you want to proceed with these changes?</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CancelSaveConfirmationModal">Cancel</button>
+                    <button type="button" class="btn btn-success" @onclick="ConfirmSaveRolePermissions">
                         <i class="bi bi-check-lg"></i> Save Changes
                     </button>
                 </div>
@@ -673,11 +754,15 @@
     
     // Permission management
     private List<Permission> availablePermissions = new();
-    private List<UserRolePermission> rolePermissions = new();
+    private List<Permission> assignedPermissions = new();
+    private List<Permission> originalAssignedPermissions = new();
     private List<int> pendingPermissionChanges = new();
     private bool isLoadingPermissions = false;
     private string? permissionErrorMessage = null;
     private UserRole? selectedRoleForPermissions = null;
+    private bool hasUnsavedChanges = false;
+    private bool showUnsavedChangesModal = false;
+    private bool showSaveConfirmationModal = false;
     
     // Form models
     public class RoleFormModel
@@ -1101,6 +1186,7 @@
             isLoadingPermissions = true;
             permissionErrorMessage = null;
             pendingPermissionChanges.Clear();
+            hasUnsavedChanges = false;
             
             // Load the selected role with its permissions
             selectedRoleForPermissions = await DbContext.UserRoles
@@ -1111,13 +1197,23 @@
             if (selectedRoleForPermissions != null)
             {
                 // Load all available permissions
-                availablePermissions = await DbContext.Permissions
+                var allPermissions = await DbContext.Permissions
                     .Where(p => p.IsActive)
                     .OrderBy(p => p.Name)
                     .ToListAsync();
                 
                 // Get current role permissions
-                rolePermissions = selectedRoleForPermissions.UserRolePermissions.ToList();
+                var currentRolePermissions = selectedRoleForPermissions.UserRolePermissions
+                    .Where(rp => rp.IsActive)
+                    .Select(rp => rp.Permission)
+                    .ToList();
+                
+                // Set up the permission lists
+                assignedPermissions = currentRolePermissions.ToList();
+                originalAssignedPermissions = currentRolePermissions.ToList();
+                availablePermissions = allPermissions
+                    .Where(p => !currentRolePermissions.Any(cp => cp.Id == p.Id))
+                    .ToList();
                 
                 showPermissionModal = true;
                 StateHasChanged();
@@ -1139,45 +1235,79 @@
         showPermissionModal = false;
         selectedRoleForPermissions = null;
         availablePermissions.Clear();
-        rolePermissions.Clear();
+        assignedPermissions.Clear();
+        originalAssignedPermissions.Clear();
         pendingPermissionChanges.Clear();
         permissionErrorMessage = null;
+        hasUnsavedChanges = false;
+        showUnsavedChangesModal = false;
+        showSaveConfirmationModal = false;
         StateHasChanged();
     }
 
-    private bool IsPermissionAssigned(int permissionId)
+    private void AddPermissionToRole(Permission permission)
     {
-        return rolePermissions.Any(rp => rp.PermissionId == permissionId && rp.IsActive);
+        if (!assignedPermissions.Any(p => p.Id == permission.Id))
+        {
+            assignedPermissions.Add(permission);
+            availablePermissions.Remove(permission);
+            hasUnsavedChanges = true;
+            StateHasChanged();
+        }
     }
 
-    private void TogglePermissionAssignment(int permissionId, bool isAssigned)
+    private void RemovePermissionFromRole(Permission permission)
     {
-        if (isAssigned)
+        if (assignedPermissions.Any(p => p.Id == permission.Id))
         {
-            // Add to pending changes if not already assigned
-            if (!IsPermissionAssigned(permissionId) && !pendingPermissionChanges.Contains(permissionId))
-            {
-                pendingPermissionChanges.Add(permissionId);
-            }
+            assignedPermissions.Remove(permission);
+            availablePermissions.Add(permission);
+            availablePermissions = availablePermissions.OrderBy(p => p.Name).ToList();
+            hasUnsavedChanges = true;
+            StateHasChanged();
+        }
+    }
+
+    private void AttemptClosePermissionModal()
+    {
+        if (hasUnsavedChanges)
+        {
+            showUnsavedChangesModal = true;
         }
         else
         {
-            // Remove from pending changes if it was added
-            pendingPermissionChanges.Remove(permissionId);
+            ClosePermissionModal();
         }
-        StateHasChanged();
     }
 
-    private void RemovePermissionFromRole(int permissionId)
+    private void CancelUnsavedChangesModal()
     {
-        var rolePermission = rolePermissions.FirstOrDefault(rp => rp.PermissionId == permissionId);
-        if (rolePermission != null)
+        showUnsavedChangesModal = false;
+    }
+
+    private void ConfirmCloseWithoutSaving()
+    {
+        showUnsavedChangesModal = false;
+        ClosePermissionModal();
+    }
+
+    private void AttemptSaveRolePermissions()
+    {
+        if (hasUnsavedChanges)
         {
-            rolePermission.IsActive = false;
-            rolePermission.ModifiedAt = DateTime.UtcNow;
-            rolePermission.ModifiedByUserId = UserScope.UserId;
+            showSaveConfirmationModal = true;
         }
-        StateHasChanged();
+    }
+
+    private void CancelSaveConfirmationModal()
+    {
+        showSaveConfirmationModal = false;
+    }
+
+    private async Task ConfirmSaveRolePermissions()
+    {
+        showSaveConfirmationModal = false;
+        await SaveRolePermissions();
     }
 
     private async Task SaveRolePermissions()
@@ -1188,10 +1318,25 @@
             
             if (selectedRoleForPermissions == null) return;
 
+            // Get current role permissions from database
+            var currentRolePermissions = await DbContext.UserRolePermissions
+                .Where(urp => urp.UserRoleId == selectedRoleForPermissions.Id)
+                .ToListAsync();
+
+            // Find permissions to add
+            var permissionsToAdd = assignedPermissions
+                .Where(ap => !originalAssignedPermissions.Any(oap => oap.Id == ap.Id))
+                .ToList();
+
+            // Find permissions to remove
+            var permissionsToRemove = originalAssignedPermissions
+                .Where(oap => !assignedPermissions.Any(ap => ap.Id == oap.Id))
+                .ToList();
+
             // Add new permissions
-            foreach (var permissionId in pendingPermissionChanges)
+            foreach (var permission in permissionsToAdd)
             {
-                var existingRolePermission = rolePermissions.FirstOrDefault(rp => rp.PermissionId == permissionId);
+                var existingRolePermission = currentRolePermissions.FirstOrDefault(rp => rp.PermissionId == permission.Id);
                 
                 if (existingRolePermission != null)
                 {
@@ -1207,7 +1352,7 @@
                     var newRolePermission = new UserRolePermission
                     {
                         UserRoleId = selectedRoleForPermissions.Id,
-                        PermissionId = permissionId,
+                        PermissionId = permission.Id,
                         IsGranted = true,
                         IsActive = true,
                         CreatedAt = DateTime.UtcNow,
@@ -1215,7 +1360,18 @@
                     };
                     
                     DbContext.UserRolePermissions.Add(newRolePermission);
-                    rolePermissions.Add(newRolePermission);
+                }
+            }
+
+            // Remove permissions
+            foreach (var permission in permissionsToRemove)
+            {
+                var rolePermission = currentRolePermissions.FirstOrDefault(rp => rp.PermissionId == permission.Id);
+                if (rolePermission != null)
+                {
+                    rolePermission.IsActive = false;
+                    rolePermission.ModifiedAt = DateTime.UtcNow;
+                    rolePermission.ModifiedByUserId = UserScope.UserId;
                 }
             }
 
@@ -1230,7 +1386,8 @@
             ClosePermissionModal();
             StateHasChanged();
 
-            Logger.LogInformation("Permissions updated for role {RoleName}", roleName);
+            Logger.LogInformation("Permissions updated for role {RoleName}. Added: {AddedCount}, Removed: {RemovedCount}", 
+                roleName, permissionsToAdd.Count, permissionsToRemove.Count);
         }
         catch (Exception ex)
         {
