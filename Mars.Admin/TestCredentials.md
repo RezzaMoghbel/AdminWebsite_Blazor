@@ -6,15 +6,15 @@ This document contains the test user credentials for the Mars Admin role-based a
 
 All test users use the password: **`12345Si!`**
 
-| Role                 | Email                            | Password   | Permissions                   |
-| -------------------- | -------------------------------- | ---------- | ----------------------------- |
-| **SuperAdmin**       | `superadmin@safelyinsured.co.uk` | `12345Si!` | Full Access + All Permissions |
-| **Developer**        | `developer@safelyinsured.co.uk`  | `12345Si!` | Full Access + All Permissions |
-| **Manager**          | `manager@safelyinsured.co.uk`    | `12345Si!` | Quotes.Read, Policies.Read    |
-| **Customer Service** | `support@safelyinsured.co.uk`    | `12345Si!` | Quotes.Read, Policies.Read    |
-| **Account**          | `account@safelyinsured.co.uk`    | `12345Si!` | Quotes.Read, Policies.Read    |
-| **Viewer**           | `viewer@safelyinsured.co.uk`     | `12345Si!` | Quotes.Read, Policies.Read    |
-| **Page Editor**      | `editor@safelyinsured.co.uk`     | `12345Si!` | None (from this set)          |
+| Role                 | Email                            | Password   | Permissions                |
+| -------------------- | -------------------------------- | ---------- | -------------------------- |
+| **SuperAdmin**       | `superadmin@safelyinsured.co.uk` | `12345Si!` | All Individual Permissions |
+| **Developer**        | `developer@safelyinsured.co.uk`  | `12345Si!` | All Individual Permissions |
+| **Manager**          | `manager@safelyinsured.co.uk`    | `12345Si!` | Quotes.Read, Policies.Read |
+| **Customer Service** | `support@safelyinsured.co.uk`    | `12345Si!` | Quotes.Read, Policies.Read |
+| **Account**          | `account@safelyinsured.co.uk`    | `12345Si!` | Quotes.Read, Policies.Read |
+| **Viewer**           | `viewer@safelyinsured.co.uk`     | `12345Si!` | Quotes.Read, Policies.Read |
+| **Page Editor**      | `editor@safelyinsured.co.uk`     | `12345Si!` | None (from this set)       |
 
 ## 🌐 Website Access
 
@@ -49,7 +49,6 @@ All users have access to the following websites:
 
 ## 📋 Available Permissions
 
-- **FullAccess**: Complete system access (SuperAdmin/Developer only)
 - **User.Create**: Create new users
 - **User.Read**: View user information
 - **User.Update**: Modify user details

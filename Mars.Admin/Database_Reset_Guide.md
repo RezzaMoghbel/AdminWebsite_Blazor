@@ -21,10 +21,13 @@ Get-Process -Name "Mars.Admin" -ErrorAction SilentlyContinue | Stop-Process -For
 # 2. Drop the entire database
 dotnet ef database drop --project Mars.Admin --force
 
-# 3. Recreate the database with all migrations
+# 3. Create migration if there are pending model changes
+dotnet ef migrations add <MigrationName> --project Mars.Admin
+
+# 4. Recreate the database with all migrations
 dotnet ef database update --project Mars.Admin
 
-# 4. Start the application (seed data runs automatically)
+# 5. Start the application (seed data runs automatically)
 dotnet run --project Mars.Admin
 ```
 
@@ -94,7 +97,29 @@ Dropping database 'MarsAdminDB' on server 'HELLODIGI'.
 Successfully dropped database 'MarsAdminDB'.
 ```
 
-### Step 3: Recreate Database
+### Step 3: Create Migration (If Needed)
+
+**Check for pending model changes:**
+
+```powershell
+dotnet ef migrations add <MigrationName> --project Mars.Admin
+```
+
+**Common migration names:**
+
+- `RemoveFullAccessPermission`
+- `UpdateUserPermissions`
+- `AddNewFeature`
+
+**Expected Output:**
+
+```
+Build started...
+Build succeeded.
+Done. To undo this action, use 'ef migrations remove'
+```
+
+### Step 4: Recreate Database
 
 **Apply all migrations:**
 
@@ -116,10 +141,11 @@ Applying migration '20250922191652_FixEmailDomainsToSafelyInsured'...
 Applying migration '20250922205019_FixCorruptedUserWebsiteAccess'...
 Applying migration '20250922205449_FixNullUserRoleId'...
 Applying migration '20250923085327_RemoveTypeFromIPSafeListing'...
+Applying migration '20250925112720_RemoveFullAccessPermission'...
 Done.
 ```
 
-### Step 4: Start Application
+### Step 5: Start Application
 
 **Run the application:**
 
@@ -137,7 +163,7 @@ info: Microsoft.Hosting.Lifetime[14] Now listening on: http://localhost:5065
 info: Microsoft.Hosting.Lifetime[0] Application started. Press Ctrl+C to shut down.
 ```
 
-### Step 5: Verify Application
+### Step 6: Verify Application
 
 **Check if application is running:**
 
@@ -168,7 +194,7 @@ netstat -ano | findstr :5065
 ### Seed Data Created
 
 - **6 User Roles**: SuperAdmin, Developer, Manager, Account, Viewer, Customer Service
-- **24 Permissions**: Full CRUD permissions for all entities
+- **23 Permissions**: Full CRUD permissions for all entities (FullAccess removed)
 - **7 Test Users**: One for each role with test credentials
 - **3 Websites**: InsureLearnerDriver (ID, ILD), SafelyInsured (SI)
 - **21 Website Access Records**: All users assigned to all websites
@@ -223,7 +249,23 @@ Cannot connect to server 'HELLODIGI'
 - Check connection string in `appsettings.json`
 - Ensure user has proper permissions
 
-**4. Migration Error:**
+**4. Migration Error - Pending Model Changes:**
+
+```
+The model for context 'ApplicationDbContext' has pending changes. Add a new migration before updating the database.
+```
+
+**Solution:**
+
+```powershell
+# Create a new migration for the pending changes
+dotnet ef migrations add <MigrationName> --project Mars.Admin
+
+# Then update the database
+dotnet ef database update --project Mars.Admin
+```
+
+**5. Migration Error - Already Applied:**
 
 ```
 Migration already applied
@@ -236,7 +278,7 @@ dotnet ef database drop --project Mars.Admin --force
 dotnet ef database update --project Mars.Admin
 ```
 
-**5. Seed Data Not Running:**
+**6. Seed Data Not Running:**
 
 - Check `Program.cs` for `seedService.SeedAsync()` call
 - Verify `SeedDataService` is registered in DI container
@@ -262,7 +304,7 @@ SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE = 'BASE TABLE'
 ```sql
 USE MarsAdminDB;
 SELECT COUNT(*) FROM UserRoles;        -- Should be 6
-SELECT COUNT(*) FROM Permissions;     -- Should be 24
+SELECT COUNT(*) FROM Permissions;     -- Should be 23 (FullAccess removed)
 SELECT COUNT(*) FROM AspNetUsers;     -- Should be 7
 SELECT COUNT(*) FROM Websites;        -- Should be 3
 SELECT COUNT(*) FROM IPSafeListings;  -- Should be 11
@@ -308,13 +350,14 @@ sqlcmd -S HELLODIGI -U MarsAdminDBUser -P StrongP@s$w0rd -Q "RESTORE DATABASE Ma
 ## Post-Reset Checklist
 
 - [ ] Database dropped successfully
+- [ ] Migration created (if needed)
 - [ ] Database recreated with all migrations
 - [ ] Application starts without errors
 - [ ] Seed data completed (check logs)
 - [ ] Can access application at `http://localhost:5065`
 - [ ] Can login with test credentials
 - [ ] All admin pages accessible
-- [ ] Permissions working correctly
+- [ ] Permissions working correctly (Developer role should work)
 - [ ] Website access functioning
 - [ ] IP safe listing working
 
@@ -341,5 +384,6 @@ If you encounter issues:
 ---
 
 **Last Updated**: January 2025  
-**Version**: 1.0  
-**Database**: MarsAdminDB (MS SQL Server)
+**Version**: 1.1  
+**Database**: MarsAdminDB (MS SQL Server)  
+**Latest Migration**: RemoveFullAccessPermission (20250925112720)
