@@ -3,6 +3,7 @@
 @using Mars.Admin.Data
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.EntityFrameworkCore
+@using Mars.Admin.Components.Shared
 @inject IUserScope UserScope
 @inject ApplicationDbContext DbContext
 @attribute [Authorize]
@@ -116,6 +117,9 @@
         </div>
     </div>
 
+    <!-- User Alert System for SuperAdmins -->
+    <UserAlertCard @ref="userAlertCard" />
+
     <div class="row mt-4">
         <div class="col-12">
             <div class="card">
@@ -198,12 +202,21 @@
     private List<string> userPermissions = new();
     private List<WebsiteInfo> userWebsites = new();
     private bool isLoadingPermissions = true;
+    private UserAlertCard? userAlertCard;
     private bool isLoadingWebsites = true;
 
     protected override async Task OnInitializedAsync()
     {
         await LoadUserPermissions();
         await LoadUserWebsites();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && userAlertCard != null)
+        {
+            await userAlertCard.ForceRefresh();
+        }
     }
 
     private async Task LoadUserPermissions()

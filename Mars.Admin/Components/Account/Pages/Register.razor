@@ -6,6 +6,7 @@
 @using Microsoft.AspNetCore.Identity
 @using Microsoft.AspNetCore.WebUtilities
 @using Mars.Admin.Data
+@using Mars.Admin.Services
 
 @inject UserManager<ApplicationUser> UserManager
 @inject IUserStore<ApplicationUser> UserStore
@@ -14,6 +15,7 @@
 @inject ILogger<Register> Logger
 @inject NavigationManager NavigationManager
 @inject IdentityRedirectManager RedirectManager
+@inject UserAlertService UserAlertService
 
 <PageTitle>Register</PageTitle>
 
@@ -79,6 +81,9 @@
         }
 
         Logger.LogInformation("User created a new account with password. Email confirmed automatically.");
+
+        // Set user as new user for alert system
+        await UserAlertService.SetUserAsNewAsync(user.Id);
 
         // Skip email confirmation - user is already confirmed
         // Sign in immediately and redirect to return URL

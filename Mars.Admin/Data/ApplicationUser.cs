@@ -16,6 +16,14 @@ public class ApplicationUser : IdentityUser
     public DateTime? DeletedAt { get; set; }
     public string? DeletedBy { get; set; }
     
+    // User alert system fields
+    public bool IsNewUser { get; set; } = false;
+    public bool NeedsAttention { get; set; } = false;
+    public DateTime? LastLoginAt { get; set; }
+    public DateTime? AttentionCreatedAt { get; set; }
+    public DateTime? AttentionIgnoredAt { get; set; }
+    public string? AttentionIgnoredBy { get; set; }
+    
     // Navigation properties
     public UserRole? UserRole { get; set; }
     public ICollection<UserWebsiteAccess> UserWebsiteAccesses { get; set; } = new List<UserWebsiteAccess>();

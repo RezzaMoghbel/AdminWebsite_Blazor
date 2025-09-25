@@ -1,0 +1,318 @@
+@using Mars.Admin.Services
+@inject UserAlertService UserAlertService
+@inject IUserScope UserScope
+@inject NavigationManager NavigationManager
+
+<style>
+    .alert-link {
+        color: inherit;
+        text-decoration: underline;
+        font-weight: 600;
+        transition: all 0.2s ease;
+    }
+    
+    .alert-link:hover {
+        color: #fff !important;
+        text-decoration: none;
+        background-color: rgba(255, 255, 255, 0.2);
+        padding: 2px 4px;
+        border-radius: 3px;
+    }
+    
+    /* Attention Needed (Red Alert) - Alert link hover */
+    .alert-danger .alert-link:hover {
+        color: #535353 !important;
+        text-decoration: none;
+        background-color: rgba(255, 255, 255, 0.2);
+        padding: 2px 4px;
+        border-radius: 3px;
+    }
+    
+    .user-email-link {
+        color: inherit;
+        text-decoration: none;
+        font-weight: 600;
+        transition: all 0.2s ease;
+    }
+    
+    /* Attention Needed (Red Alert) - Email hover */
+    .alert-danger .user-email-link:hover {
+        color: #79131d !important;
+        text-decoration: underline;
+        background-color: rgba(255, 255, 255, 0.1);
+        padding: 2px 6px;
+        border-radius: 4px;
+    }
+    
+    /* Inactive Users (Yellow Alert) - Email hover */
+    .alert-warning .user-email-link:hover {
+        color: #897124 !important;
+        text-decoration: underline;
+        background-color: rgba(255, 255, 255, 0.1);
+        padding: 2px 6px;
+        border-radius: 4px;
+    }
+    
+    /* Ignored Alerts (Gray Alert) - Email hover */
+    .alert-secondary .user-email-link:hover {
+        color: #fff !important;
+        text-decoration: underline;
+        background-color: rgba(255, 255, 255, 0.1);
+        padding: 2px 6px;
+        border-radius: 4px;
+    }
+</style>
+
+@if (UserScope.IsSuperAdmin)
+{
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">
+                        <i class="bi bi-bell-fill text-warning"></i>
+                        User Management Alerts
+                    </h5>
+                    <button class="btn btn-sm btn-outline-secondary" @onclick="RefreshAlerts">
+                        <i class="bi bi-arrow-clockwise"></i> Refresh
+                    </button>
+                </div>
+                <div class="card-body">
+                    @if (isLoading)
+                    {
+                        <div class="text-center">
+                            <div class="spinner-border spinner-border-sm" role="status">
+                                <span class="visually-hidden">Loading alerts...</span>
+                            </div>
+                            <p class="text-muted mt-2">Loading user alerts...</p>
+                        </div>
+                    }
+                    else
+                    {
+
+                        <!-- Attention Needed Section -->
+                        @if (alertSummary.AttentionNeeded.Any())
+                        {
+                            <div class="alert alert-danger mb-3">
+                                <h6 class="alert-heading">
+                                    <i class="bi bi-exclamation-triangle-fill"></i>
+                                    Attention Needed (@alertSummary.AttentionNeeded.Count)
+                                </h6>
+                                <div class="row">
+                                    @foreach (var user in alertSummary.AttentionNeeded.Take(5))
+                                    {
+                                        <div class="col-md-6 mb-2">
+                                            <div class="d-flex justify-content-between align-items-center">
+                                                <div>
+                                                    <a href="/admin/users" class="user-email-link">
+                                                        @user.Email
+                                                    </a>
+                                                    <br><small class="text-muted">@((MarkupString)GetFormattedReason(user.Reason)) - @user.DaysSince days ago</small>
+                                                </div>
+                                                <div>
+                                                    <button class="btn btn-sm btn-outline-dark" @onclick="() => IgnoreAlert(user.Id)">
+                                                        <i class="bi bi-check"></i> Ignore
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    }
+                                </div>
+                                @if (alertSummary.AttentionNeeded.Count > 5)
+                                {
+                                    <div class="text-center mt-2">
+                                        <a href="/admin/users" class="btn btn-outline-dark btn-sm">
+                                            View All @alertSummary.AttentionNeeded.Count Issues
+                                        </a>
+                                    </div>
+                                }
+                            </div>
+                        }
+
+                        <!-- Inactive Users Section -->
+                        @if (alertSummary.InactiveUsers.Any())
+                        {
+                            <div class="alert alert-warning mb-3">
+                                <h6 class="alert-heading">
+                                    <i class="bi bi-clock-history"></i>
+                                    Inactive Users (@alertSummary.InactiveUsers.Count)
+                                </h6>
+                                <p class="mb-2">Users who haven't logged in for 30+ days.</p>
+                                <div class="row">
+                                    @foreach (var user in alertSummary.InactiveUsers.Take(5))
+                                    {
+                                        <div class="col-md-6 mb-2">
+                                            <div class="d-flex justify-content-between align-items-center">
+                                                <div>
+                                                    <a href="/admin/users" class="user-email-link">
+                                                        @user.Email
+                                                    </a>
+                                                    <br><small class="text-muted">Last login: @user.DaysSince days ago</small>
+                                                </div>
+                                                <div>
+                                                    <button class="btn btn-sm btn-outline-dark" @onclick="() => IgnoreAlert(user.Id)">
+                                                        <i class="bi bi-check"></i> Ignore
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    }
+                                </div>
+                                @if (alertSummary.InactiveUsers.Count > 5)
+                                {
+                                    <div class="text-center mt-2">
+                                        <a href="/admin/users" class="btn btn-outline-dark btn-sm">
+                                            View All @alertSummary.InactiveUsers.Count Inactive Users
+                                        </a>
+                                    </div>
+                                }
+                            </div>
+                        }
+
+                        <!-- Ignored Alerts Section (Only show if there are ignored alerts) -->
+                        @if (alertSummary.IgnoredAlerts.Any())
+                        {
+                            <div class="mt-3">
+                                <button class="btn btn-link p-0" type="button" @onclick="ToggleIgnoredAlerts">
+                                    <i class="bi @(showIgnoredAlerts ? "bi-chevron-up" : "bi-chevron-down")"></i>
+                                    Ignored Alerts (@alertSummary.IgnoredAlerts.Count)
+                                </button>
+                                @if (showIgnoredAlerts)
+                                {
+                                    <div class="mt-2">
+                                        <div class="alert alert-secondary">
+                                            <div class="row">
+                                                @foreach (var user in alertSummary.IgnoredAlerts.Take(10))
+                                                {
+                                                <div class="col-md-6 mb-2">
+                                                    <div class="d-flex justify-content-between align-items-center">
+                                                        <div>
+                                                            <a href="/admin/users" class="user-email-link">
+                                                                @user.Email
+                                                            </a>
+                                                            <br><small class="text-muted">Ignored @user.DaysSince days ago</small>
+                                                        </div>
+                                                        <div>
+                                                            <button class="btn btn-sm btn-outline-secondary" @onclick="() => UnignoreAlert(user.Id)">
+                                                                <i class="bi bi-arrow-counterclockwise"></i> Un-ignore
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                }
+                                            </div>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        }
+
+                        <!-- No Alerts Message -->
+                        @if (!alertSummary.AttentionNeeded.Any() && !alertSummary.InactiveUsers.Any() && !alertSummary.IgnoredAlerts.Any())
+                        {
+                            <div class="alert alert-success">
+                                <i class="bi bi-check-circle-fill"></i>
+                                <strong>All Good!</strong> No user management alerts at this time.
+                            </div>
+                        }
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private UserAlertSummary alertSummary = new();
+    private bool isLoading = true;
+    private bool showIgnoredAlerts = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAlerts();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await LoadAlerts();
+            StateHasChanged();
+        }
+    }
+
+    private async Task LoadAlerts()
+    {
+        try
+        {
+            isLoading = true;
+            alertSummary = await UserAlertService.GetUserAlertSummaryAsync();
+        }
+        catch (Exception ex)
+        {
+            // Log error but don't break the page
+            Console.WriteLine($"Error loading alerts: {ex.Message}");
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task RefreshAlerts()
+    {
+        await LoadAlerts();
+    }
+
+    public async Task ForceRefresh()
+    {
+        await LoadAlerts();
+        StateHasChanged();
+    }
+
+    private void ToggleIgnoredAlerts()
+    {
+        showIgnoredAlerts = !showIgnoredAlerts;
+        StateHasChanged();
+    }
+
+    private async Task IgnoreAlert(string userId)
+    {
+        try
+        {
+            await UserAlertService.IgnoreAlertAsync(userId, "Current User"); // TODO: Get actual current user
+            await LoadAlerts();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error ignoring alert: {ex.Message}");
+        }
+    }
+
+    private async Task UnignoreAlert(string userId)
+    {
+        try
+        {
+            await UserAlertService.UnignoreAlertAsync(userId);
+            await LoadAlerts();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error un-ignoring alert: {ex.Message}");
+        }
+    }
+
+    private string GetFormattedReason(string reason)
+    {
+        return reason switch
+        {
+            "New user - no role and website assigned" => "New user - no <a href=\"/admin/roles\" class=\"alert-link\">role</a> and <a href=\"/admin/websites\" class=\"alert-link\">website</a> assigned",
+            "New user - no role assigned" => "New user - no <a href=\"/admin/roles\" class=\"alert-link\">role</a> assigned",
+            "New user - no website assigned" => "New user - no <a href=\"/admin/websites\" class=\"alert-link\">website</a> assigned",
+            "No role and website assigned" => "No <a href=\"/admin/roles\" class=\"alert-link\">role</a> and <a href=\"/admin/websites\" class=\"alert-link\">website</a> assigned",
+            "No role assigned" => "No <a href=\"/admin/roles\" class=\"alert-link\">role</a> assigned",
+            "No website assigned" => "No <a href=\"/admin/websites\" class=\"alert-link\">website</a> assigned",
+            _ => reason
+        };
+    }
+}

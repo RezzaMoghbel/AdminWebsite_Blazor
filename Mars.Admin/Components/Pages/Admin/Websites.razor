@@ -7,6 +7,8 @@
 @inject ApplicationDbContext DbContext
 @inject IUserScope UserScope
 @inject ILogger<Websites> Logger
+@inject UserAlertService UserAlertService
+@inject NavigationManager NavigationManager
 @attribute [Authorize(Policy = "Website.Read")]
 
 @rendermode InteractiveServer
@@ -1263,6 +1265,12 @@
 
             await DbContext.SaveChangesAsync();
             
+            // Check if users need attention after website assignment changes
+            foreach (var user in usersToAdd.Concat(usersToRemove))
+            {
+                await UserAlertService.CheckUserNeedsAttentionAsync(user.Id);
+            }
+            
             // Store the website code for logging before closing the modal
             var websiteCode = selectedWebsite.Code;
             
@@ -1271,6 +1279,12 @@
             
             CloseUserModal();
             StateHasChanged();
+            
+            // Refresh dashboard if we're on it
+            if (NavigationManager.Uri.Contains("/dashboard") || NavigationManager.Uri.EndsWith("/"))
+            {
+                NavigationManager.NavigateTo(NavigationManager.Uri, forceLoad: true);
+            }
 
             Logger.LogInformation("User assignments updated for website {WebsiteCode}. Added: {AddedCount}, Removed: {RemovedCount}", 
                 websiteCode, usersToAdd.Count, usersToRemove.Count);

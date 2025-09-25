@@ -74,6 +74,7 @@ builder.Services.AddSingleton<IEmailSender<ApplicationUser>, IdentityNoOpEmailSe
 // 7) Role-based access control services
 builder.Services.AddScoped<IUserScope, UserScope>();
 builder.Services.AddScoped<SeedDataService>();
+builder.Services.AddScoped<UserAlertService>();
 
 // 8) Dynamic Authorization system
 builder.Services.AddScoped<IAuthorizationHandler, DynamicPermissionAuthorizationHandler>();

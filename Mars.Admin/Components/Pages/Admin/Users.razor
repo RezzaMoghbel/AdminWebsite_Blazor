@@ -9,6 +9,8 @@
 @inject IUserScope UserScope
 @inject ILogger<Users> Logger
 @inject UserManager<ApplicationUser> UserManager
+@inject UserAlertService UserAlertService
+@inject NavigationManager NavigationManager
 @attribute [Authorize(Policy = "User.Read")]
 
 @rendermode InteractiveServer
@@ -713,9 +715,18 @@
             
             if (result.Succeeded)
             {
+                // Check if user needs attention after role assignment
+                await UserAlertService.CheckUserNeedsAttentionAsync(selectedUser.Id);
+                
                 await LoadUsers(); // Refresh the user list
                 CloseEditModal();
                 StateHasChanged();
+                
+                // Refresh dashboard if we're on it
+                if (NavigationManager.Uri.Contains("/dashboard") || NavigationManager.Uri.EndsWith("/"))
+                {
+                    NavigationManager.NavigateTo(NavigationManager.Uri, forceLoad: true);
+                }
                 
                 Logger.LogInformation("User {Email} updated successfully", userEmail);
             }

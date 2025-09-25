@@ -29,6 +29,10 @@ public class CustomClaimsPrincipalFactory : UserClaimsPrincipalFactory<Applicati
             return new ClaimsIdentity();
         }
 
+        // Update last login time
+        user.LastLoginAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
+
         var identity = await base.GenerateClaimsAsync(user);
 
         // Add logging to debug claims generation
