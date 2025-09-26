@@ -1,0 +1,459 @@
+@page "/developer-guide"
+@using Mars.Admin.Services
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
+@inject IUserScope UserScope
+
+<PageTitle>Developer Guide - Mars Admin System</PageTitle>
+
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header bg-dark text-white">
+                    <h2 class="mb-0">
+                        <i class="bi bi-code-slash me-2"></i>
+                        Mars Admin System - Developer Guide
+                    </h2>
+                    <p class="mb-0 mt-2">Comprehensive guide for developers on implementing permissions, authorization, and creating new pages</p>
+                </div>
+                <div class="card-body">
+                    
+                    <!-- Overview Section -->
+                    <section class="mb-5">
+                        <h3 class="text-dark border-bottom pb-2">
+                            <i class="bi bi-info-circle me-2"></i>
+                            Overview
+                        </h3>
+                        <div class="row">
+                            <div class="col-md-8">
+                                <p class="lead">This guide provides comprehensive instructions for developers on how to implement permissions, authorization, and create new pages in the Mars Admin System.</p>
+                                <p>The system uses ASP.NET Core Identity with custom claims-based authorization to provide a robust, scalable permission system.</p>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="alert alert-warning">
+                                    <h5><i class="bi bi-exclamation-triangle me-2"></i>Important</h5>
+                                    <p class="mb-0">This guide is for developers only. Always test authorization thoroughly before deploying to production.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- Architecture Overview Section -->
+                    <section class="mb-5">
+                        <h3 class="text-dark border-bottom pb-2">
+                            <i class="bi bi-diagram-3 me-2"></i>
+                            Architecture Overview
+                        </h3>
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h4>Core Components</h4>
+                                <ul class="list-group list-group-flush">
+                                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                                        <span><i class="bi bi-person-check text-primary me-2"></i><strong>ASP.NET Core Identity</strong></span>
+                                        <span class="badge bg-primary rounded-pill">Auth</span>
+                                    </li>
+                                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                                        <span><i class="bi bi-key text-success me-2"></i><strong>Custom Claims</strong></span>
+                                        <span class="badge bg-success rounded-pill">Perms</span>
+                                    </li>
+                                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                                        <span><i class="bi bi-shield-check text-warning me-2"></i><strong>Dynamic Authorization</strong></span>
+                                        <span class="badge bg-warning rounded-pill">Runtime</span>
+                                    </li>
+                                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                                        <span><i class="bi bi-diagram-2 text-info me-2"></i><strong>Role-Based Access Control</strong></span>
+                                        <span class="badge bg-info rounded-pill">RBAC</span>
+                                    </li>
+                                </ul>
+                            </div>
+                            <div class="col-md-6">
+                                <h4>Key Services</h4>
+                                <div class="card">
+                                    <div class="card-body">
+                                        <h6><i class="bi bi-gear text-primary me-2"></i>IUserScope Service</h6>
+                                        <p class="small mb-2">User context and permission checking</p>
+                                        <div class="small">
+                                            <strong>Key Methods:</strong>
+                                            <ul class="list-unstyled mt-1">
+                                                <li><code>HasPermission(permission)</code> - Check single permission</li>
+                                                <li><code>HasWebsiteAccess(websiteId)</code> - Check website access</li>
+                                                <li><code>IsSuperAdmin</code> - Check SuperAdmin status</li>
+                                                <li><code>GetAccessibleWebsites()</code> - Get user's websites</li>
+                                            </ul>
+                                        </div>
+                                        
+                                        <hr class="my-3">
+                                        
+                                        <h6><i class="bi bi-bell text-warning me-2"></i>UserAlertService</h6>
+                                        <p class="small mb-2">User attention and alert management</p>
+                                        <div class="small">
+                                            <strong>Key Methods:</strong>
+                                            <ul class="list-unstyled mt-1">
+                                                <li><code>SetUserAsNewAsync(userId)</code> - Flag new users</li>
+                                                <li><code>CheckUserNeedsAttentionAsync(userId)</code> - Check user status</li>
+                                                <li><code>IgnoreAlertAsync(userId, ignoredBy)</code> - Dismiss alerts</li>
+                                                <li><code>GetUserAlertSummaryAsync()</code> - Get dashboard data</li>
+                                            </ul>
+                                        </div>
+                                        
+                                        <hr class="my-3">
+                                        
+                                        <h6><i class="bi bi-shield-check text-success me-2"></i>CustomClaimsPrincipalFactory</h6>
+                                        <p class="small mb-2">Claims generation during login</p>
+                                        <code>Claims: "perm", "site", ClaimTypes.Role</code>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- Permission System Implementation Section -->
+                    <section class="mb-5">
+                        <h3 class="text-dark border-bottom pb-2">
+                            <i class="bi bi-key me-2"></i>
+                            Permission System Implementation
+                        </h3>
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h4>Database Models</h4>
+                                <div class="card">
+                                    <div class="card-header bg-light">
+                                        <h6 class="mb-0">Permission Model</h6>
+                                    </div>
+                                    <div class="card-body">
+                                        <p class="small mb-2">The Permission model contains:</p>
+                                        <ul class="list-unstyled small">
+                                            <li><code>Id</code>: Unique identifier</li>
+                                            <li><code>Name</code>: Permission name (e.g., "User.Create", "Role.Update")</li>
+                                            <li><code>Description</code>: Human-readable description</li>
+                                            <li><code>IsActive</code>: Enable/disable permission</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <h4>Claims Structure</h4>
+                                <div class="card">
+                                    <div class="card-header bg-light">
+                                        <h6 class="mb-0">Three Types of Claims</h6>
+                                    </div>
+                                    <div class="card-body">
+                                        <ul class="list-unstyled">
+                                            <li><i class="bi bi-tag text-primary me-2"></i><strong>Role Claims:</strong> <code>ClaimTypes.Role</code> (e.g., "SuperAdmin", "Developer")</li>
+                                            <li><i class="bi bi-key text-success me-2"></i><strong>Permission Claims:</strong> <code>"perm"</code> (e.g., "User.Create", "Role.Update")</li>
+                                            <li><i class="bi bi-globe text-info me-2"></i><strong>Website Claims:</strong> <code>"site"</code> (e.g., "WebsiteId1", "WebsiteId2")</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- Creating New Pages Section -->
+                    <section class="mb-5">
+                        <h3 class="text-dark border-bottom pb-2">
+                            <i class="bi bi-file-earmark-plus me-2"></i>
+                            Creating New Pages with Authorization
+                        </h3>
+                        
+                        <div class="row">
+                            <div class="col-12">
+                                <h4>Step 1: Basic Page Structure</h4>
+                                <div class="card">
+                                    <div class="card-header bg-light">
+                                        <h6 class="mb-0">Required Elements for New Pages</h6>
+                                    </div>
+                                    <div class="card-body">
+                                        <ol>
+                                            <li><strong>Page Directive:</strong> <code>@@page "/admin/newfeature"</code></li>
+                                            <li><strong>Using Statements:</strong> Import required services</li>
+                                            <li><strong>Authorization:</strong> <code>@@attribute [Authorize]</code></li>
+                                            <li><strong>Service Injection:</strong> <code>@@inject IUserScope UserScope</code></li>
+                                            <li><strong>Permission Checks:</strong> Verify user has required permissions</li>
+                                            <li><strong>UI Elements:</strong> Show/hide based on permissions</li>
+                                        </ol>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- Permission Checking Methods Section -->
+                    <section class="mb-5">
+                        <h3 class="text-dark border-bottom pb-2">
+                            <i class="bi bi-check-circle me-2"></i>
+                            Permission Checking Methods
+                        </h3>
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h4>Using IUserScope Service</h4>
+                                <div class="card">
+                                    <div class="card-body">
+                                        <h6>Common Permission Checks:</h6>
+                                        <ul class="list-unstyled small">
+                                            <li><code>UserScope.HasPermission("User.Create")</code> - Single permission</li>
+                                            <li><code>UserScope.HasPermission("User.Update") && UserScope.HasPermission("User.Read")</code> - Multiple permissions</li>
+                                            <li><code>UserScope.HasWebsiteAccess(websiteId)</code> - Website access</li>
+                                            <li><code>UserScope.IsSuperAdmin</code> - SuperAdmin check</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <h4>Direct Claims Checking</h4>
+                                <div class="card">
+                                    <div class="card-body">
+                                        <h6>Direct Claim Verification:</h6>
+                                        <ul class="list-unstyled small">
+                                            <li><code>User.HasClaim("perm", "User.Create")</code> - Permission claim</li>
+                                            <li><code>User.IsInRole("SuperAdmin")</code> - Role claim</li>
+                                            <li><code>User.HasClaim("site", websiteId.ToString())</code> - Website claim</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- Authorization Attributes Section -->
+                    <section class="mb-5">
+                        <h3 class="text-dark border-bottom pb-2">
+                            <i class="bi bi-shield-check me-2"></i>
+                            Authorization Attributes
+                        </h3>
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h4>Page-Level Authorization</h4>
+                                <div class="card">
+                                    <div class="card-body">
+                                        <h6>Common Page Attributes:</h6>
+                                        <ul class="list-unstyled small">
+                                            <li><code>@@attribute [Authorize]</code> - Requires authentication</li>
+                                            <li><code>@@attribute [Authorize(Roles = "SuperAdmin")]</code> - Requires specific role</li>
+                                            <li><code>@@attribute [Authorize(Policy = "PermissionPolicy")]</code> - Requires policy</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <h4>Method-Level Authorization</h4>
+                                <div class="card">
+                                    <div class="card-body">
+                                        <h6>Method Attributes:</h6>
+                                        <ul class="list-unstyled small">
+                                            <li><code>[Authorize(Policy = "PermissionPolicy")]</code> - Policy requirement</li>
+                                            <li><code>[Authorize(Roles = "SuperAdmin,Developer")]</code> - Multiple roles</li>
+                                            <li><code>[Authorize]</code> - Basic authentication</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- Complete Example Section -->
+                    <section class="mb-5">
+                        <h3 class="text-dark border-bottom pb-2">
+                            <i class="bi bi-file-code me-2"></i>
+                            Complete Example: User Management Page
+                        </h3>
+                        
+                        <div class="alert alert-info">
+                            <h5><i class="bi bi-info-circle me-2"></i>Permission Requirements</h5>
+                            <p class="mb-0">To use this page, users need these permissions:</p>
+                            <ul class="mb-0 mt-2">
+                                <li><code>User.Read</code>: Required to see the page</li>
+                                <li><code>User.Create</code>: Required to create new users</li>
+                                <li><code>User.Update</code>: Required to edit existing users</li>
+                                <li><code>User.Delete</code>: Required to delete users</li>
+                                <li><code>User.Read</code>: Required to export user data</li>
+                            </ul>
+                        </div>
+                        
+                        <div class="card">
+                            <div class="card-header bg-light">
+                                <h6 class="mb-0">Key Implementation Points</h6>
+                            </div>
+                            <div class="card-body">
+                                <ol>
+                                    <li><strong>Page Setup:</strong> Include page directive, using statements, and authorization attribute</li>
+                                    <li><strong>Service Injection:</strong> Inject IUserScope, ApplicationDbContext, and NavigationManager</li>
+                                    <li><strong>Permission Checks:</strong> Verify permissions in OnInitializedAsync and before actions</li>
+                                    <li><strong>UI Conditional Rendering:</strong> Show/hide buttons and sections based on permissions</li>
+                                    <li><strong>Data Loading:</strong> Load data only if user has required permissions</li>
+                                    <li><strong>Action Methods:</strong> Check permissions before executing any user actions</li>
+                                </ol>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- Adding New Permissions Section -->
+                    <section class="mb-5">
+                        <h3 class="text-dark border-bottom pb-2">
+                            <i class="bi bi-plus-circle me-2"></i>
+                            Adding New Permissions
+                        </h3>
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h4>Database Migration</h4>
+                                <div class="card">
+                                    <div class="card-header bg-light">
+                                        <h6 class="mb-0">In SeedDataService.cs</h6>
+                                    </div>
+                                    <div class="card-body">
+                                        <h6>Steps to Add New Permissions:</h6>
+                                        <ol class="small">
+                                            <li>Add new Permission objects to the permissions array</li>
+                                            <li>Include Name, Description, and IsActive properties</li>
+                                            <li>Check if permission already exists before adding</li>
+                                            <li>Save changes to database</li>
+                                        </ol>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <h4>Role Assignment</h4>
+                                <div class="card">
+                                    <div class="card-header bg-light">
+                                        <h6 class="mb-0">Assign to SuperAdmin</h6>
+                                    </div>
+                                    <div class="card-body">
+                                        <h6>Role Assignment Process:</h6>
+                                        <ol class="small">
+                                            <li>Get SuperAdmin role from database</li>
+                                            <li>Get all permissions from database</li>
+                                            <li>Check if permission-role relationship exists</li>
+                                            <li>Create UserRolePermission if not exists</li>
+                                            <li>Save changes to database</li>
+                                        </ol>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- Best Practices Section -->
+                    <section class="mb-5">
+                        <h3 class="text-dark border-bottom pb-2">
+                            <i class="bi bi-star me-2"></i>
+                            Best Practices
+                        </h3>
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="card border-success">
+                                    <div class="card-header bg-success text-white">
+                                        <h5 class="mb-0"><i class="bi bi-key me-2"></i>Permission Naming Convention</h5>
+                                    </div>
+                                    <div class="card-body">
+                                        <ul class="list-unstyled">
+                                            <li><i class="bi bi-check text-success me-2"></i>Use descriptive names: <code>User.Create</code>, <code>Role.Update</code>, <code>Website.Delete</code></li>
+                                            <li><i class="bi bi-check text-success me-2"></i>Follow consistent patterns: <code>[Action][Resource]</code></li>
+                                            <li><i class="bi bi-check text-success me-2"></i>Use PascalCase for permission names</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="card border-warning">
+                                    <div class="card-header bg-warning text-dark">
+                                        <h5 class="mb-0"><i class="bi bi-shield-check me-2"></i>Security Guidelines</h5>
+                                    </div>
+                                    <div class="card-body">
+                                        <ul class="list-unstyled">
+                                            <li><i class="bi bi-check text-success me-2"></i><strong>Always check permissions</strong> before showing UI elements</li>
+                                            <li><i class="bi bi-check text-success me-2"></i><strong>Verify permissions</strong> before executing actions</li>
+                                            <li><i class="bi bi-check text-success me-2"></i><strong>Use least privilege</strong> principle</li>
+                                            <li><i class="bi bi-check text-success me-2"></i><strong>Log permission checks</strong> for audit purposes</li>
+                                            <li><i class="bi bi-check text-success me-2"></i><strong>Test authorization</strong> thoroughly</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- Troubleshooting Section -->
+                    <section class="mb-5">
+                        <h3 class="text-dark border-bottom pb-2">
+                            <i class="bi bi-tools me-2"></i>
+                            Troubleshooting
+                        </h3>
+                        
+                        <div class="row">
+                            <div class="col-md-4">
+                                <div class="card border-danger">
+                                    <div class="card-header bg-danger text-white">
+                                        <h6 class="mb-0">"Access Denied" Errors</h6>
+                                    </div>
+                                    <div class="card-body">
+                                        <ul class="list-unstyled small">
+                                            <li><i class="bi bi-check text-success me-2"></i>Check if user has the required permission</li>
+                                            <li><i class="bi bi-check text-success me-2"></i>Verify permission is assigned to user's role</li>
+                                            <li><i class="bi bi-check text-success me-2"></i>Ensure permission is active in database</li>
+                                            <li><i class="bi bi-check text-success me-2"></i>Check website access if applicable</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="card border-warning">
+                                    <div class="card-header bg-warning text-dark">
+                                        <h6 class="mb-0">Permissions Not Working</h6>
+                                    </div>
+                                    <div class="card-body">
+                                        <ul class="list-unstyled small">
+                                            <li><i class="bi bi-check text-success me-2"></i>Verify claims are generated correctly</li>
+                                            <li><i class="bi bi-check text-success me-2"></i>Check if permission exists in database</li>
+                                            <li><i class="bi bi-check text-success me-2"></i>Ensure role-permission relationship exists</li>
+                                            <li><i class="bi bi-check text-success me-2"></i>Clear browser cache and re-login</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="card border-info">
+                                    <div class="card-header bg-info text-white">
+                                        <h6 class="mb-0">Debug Tools</h6>
+                                    </div>
+                                    <div class="card-body">
+                                        <h6 class="small">Debug Commands:</h6>
+                                        <ul class="list-unstyled small">
+                                            <li><code>User.Claims.ToList()</code> - View all claims</li>
+                                            <li><code>UserScope.IsSuperAdmin</code> - Check SuperAdmin status</li>
+                                            <li><code>UserScope.HasPermission("User.Create")</code> - Test permission</li>
+                                            <li><code>UserScope.GetAccessibleWebsites()</code> - List websites</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- Footer -->
+                    <div class="alert alert-light border text-center">
+                        <p class="mb-0">
+                            <i class="bi bi-info-circle me-2"></i>
+                            <em>This guide should be updated whenever new authorization patterns or permissions are added to the system. Always test authorization thoroughly before deploying to production.</em>
+                        </p>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    protected override void OnInitialized()
+    {
+        // This page is accessible to all logged-in users without specific permissions
+        // No additional permission checks needed
+    }
+}

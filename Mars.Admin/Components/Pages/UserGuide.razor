@@ -1,0 +1,510 @@
+@page "/user-guide"
+@using Mars.Admin.Services
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
+@inject IUserScope UserScope
+
+<PageTitle>User Guide - Mars Admin System</PageTitle>
+
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h2 class="mb-0">
+                        <i class="bi bi-book me-2"></i>
+                        Mars Admin System - User Guide
+                    </h2>
+                    <p class="mb-0 mt-2">Complete guide to using the Mars Admin System</p>
+                </div>
+                <div class="card-body">
+                    
+                    <!-- Overview Section -->
+                    <section class="mb-5">
+                        <h3 class="text-primary border-bottom pb-2">
+                            <i class="bi bi-info-circle me-2"></i>
+                            System Overview
+                        </h3>
+                        <div class="row">
+                            <div class="col-md-8">
+                                <p class="lead">The Mars Admin System is a comprehensive role-based access control (RBAC) platform designed to manage users, roles, permissions, and website access across multiple organizations.</p>
+                                <p>This guide will walk you through the complete user journey and system capabilities, helping you understand how to navigate and use the system effectively.</p>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="alert alert-info">
+                                    <h5><i class="bi bi-lightbulb me-2"></i>Quick Start</h5>
+                                    <p class="mb-0">New to the system? Start with the <strong>Getting Started</strong> section below!</p>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- Getting Started Section -->
+                    <section class="mb-5">
+                        <h3 class="text-primary border-bottom pb-2">
+                            <i class="bi bi-play-circle me-2"></i>
+                            Getting Started
+                        </h3>
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h4><i class="bi bi-person-plus me-2"></i>User Registration & Login</h4>
+                                <ul class="list-unstyled">
+                                    <li><i class="bi bi-check-circle text-success me-2"></i><strong>Registration:</strong> New users can register through the <code>/register</code> page</li>
+                                    <li><i class="bi bi-check-circle text-success me-2"></i><strong>Login:</strong> Access the system via <code>/login</code> with your credentials</li>
+                                    <li><i class="bi bi-check-circle text-success me-2"></i><strong>First Login:</strong> New users are automatically flagged for attention until assigned roles and website access</li>
+                                </ul>
+                            </div>
+                            <div class="col-md-6">
+                                <h4><i class="bi bi-speedometer2 me-2"></i>Dashboard Overview</h4>
+                                <p>After logging in, you'll see the main dashboard with:</p>
+                                <ul class="list-unstyled">
+                                    <li><i class="bi bi-bell text-warning me-2"></i><strong>User Management Alerts:</strong> Real-time notifications about users needing attention</li>
+                                    <li><i class="bi bi-compass text-info me-2"></i><strong>Quick Access:</strong> Navigation to all system modules</li>
+                                    <li><i class="bi bi-graph-up text-success me-2"></i><strong>System Status:</strong> Overview of users, roles, permissions, and websites</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- User Journey Section -->
+                    <section class="mb-5">
+                        <h3 class="text-primary border-bottom pb-2">
+                            <i class="bi bi-diagram-3 me-2"></i>
+                            User Journey & System Flow
+                        </h3>
+                        
+                        <div class="row">
+                            <div class="col-12">
+                                <h4>Phase 1: User Registration & Initial Setup</h4>
+                                <div class="alert alert-light border">
+                                    <div class="text-center mb-3">
+                                        <code class="fs-5">Registration → Login → Dashboard → Alert Notification → Role Assignment → Website Assignment → Complete Setup</code>
+                                    </div>
+                                </div>
+                                
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <ol class="list-group list-group-numbered">
+                                            <li class="list-group-item d-flex justify-content-between align-items-start">
+                                                <div class="ms-2 me-auto">
+                                                    <div class="fw-bold">User Registers</div>
+                                                    Creates account with email and password
+                                                </div>
+                                            </li>
+                                            <li class="list-group-item d-flex justify-content-between align-items-start">
+                                                <div class="ms-2 me-auto">
+                                                    <div class="fw-bold">First Login</div>
+                                                    System flags user as "needs attention"
+                                                </div>
+                                            </li>
+                                            <li class="list-group-item d-flex justify-content-between align-items-start">
+                                                <div class="ms-2 me-auto">
+                                                    <div class="fw-bold">SuperAdmin Notification</div>
+                                                    Alert appears on dashboard
+                                                </div>
+                                            </li>
+                                        </ol>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <ol class="list-group list-group-numbered" start="4">
+                                            <li class="list-group-item d-flex justify-content-between align-items-start">
+                                                <div class="ms-2 me-auto">
+                                                    <div class="fw-bold">Role Assignment</div>
+                                                    SuperAdmin assigns appropriate role
+                                                </div>
+                                            </li>
+                                            <li class="list-group-item d-flex justify-content-between align-items-start">
+                                                <div class="ms-2 me-auto">
+                                                    <div class="fw-bold">Website Assignment</div>
+                                                    SuperAdmin grants access to specific websites
+                                                </div>
+                                            </li>
+                                            <li class="list-group-item d-flex justify-content-between align-items-start">
+                                                <div class="ms-2 me-auto">
+                                                    <div class="fw-bold">Setup Complete</div>
+                                                    User can now access assigned features
+                                                </div>
+                                            </li>
+                                        </ol>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- Role-Based Access Control Section -->
+                    <section class="mb-5">
+                        <h3 class="text-primary border-bottom pb-2">
+                            <i class="bi bi-shield-check me-2"></i>
+                            Role-Based Access Control
+                        </h3>
+                        
+                        <div class="row">
+                            <div class="col-md-4">
+                                <div class="card border-danger">
+                                    <div class="card-header bg-danger text-white">
+                                        <h5 class="mb-0"><i class="bi bi-crown me-2"></i>SuperAdmin Role</h5>
+                                    </div>
+                                    <div class="card-body">
+                                        <ul class="list-unstyled">
+                                            <li><i class="bi bi-check text-success me-2"></i><strong>Full System Access:</strong> Can manage everything</li>
+                                            <li><i class="bi bi-check text-success me-2"></i><strong>User Management:</strong> Create, edit, deactivate users</li>
+                                            <li><i class="bi bi-check text-success me-2"></i><strong>Role Management:</strong> Assign and modify user roles</li>
+                                            <li><i class="bi bi-check text-success me-2"></i><strong>Permission Management:</strong> Control what each role can do</li>
+                                            <li><i class="bi bi-check text-success me-2"></i><strong>Website Management:</strong> Manage website access for users</li>
+                                            <li><i class="bi bi-check text-success me-2"></i><strong>Alert Management:</strong> Handle user attention alerts</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="card border-warning">
+                                    <div class="card-header bg-warning text-dark">
+                                        <h5 class="mb-0"><i class="bi bi-code-slash me-2"></i>Developer Role</h5>
+                                    </div>
+                                    <div class="card-body">
+                                        <ul class="list-unstyled">
+                                            <li><i class="bi bi-check text-success me-2"></i><strong>Technical Access:</strong> Development and testing capabilities</li>
+                                            <li><i class="bi bi-check text-success me-2"></i><strong>Limited Admin:</strong> Some administrative functions</li>
+                                            <li><i class="bi bi-check text-success me-2"></i><strong>System Monitoring:</strong> Access to logs and system status</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="card border-info">
+                                    <div class="card-header bg-info text-white">
+                                        <h5 class="mb-0"><i class="bi bi-people me-2"></i>Standard Roles</h5>
+                                    </div>
+                                    <div class="card-body">
+                                        <p class="mb-2">Viewer, Editor, etc.</p>
+                                        <ul class="list-unstyled">
+                                            <li><i class="bi bi-check text-success me-2"></i><strong>Content Access:</strong> Based on assigned permissions</li>
+                                            <li><i class="bi bi-check text-success me-2"></i><strong>Website-Specific:</strong> Limited to assigned websites</li>
+                                            <li><i class="bi bi-check text-success me-2"></i><strong>Feature-Limited:</strong> Access only to permitted features</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- Core System Modules Section -->
+                    <section class="mb-5">
+                        <h3 class="text-primary border-bottom pb-2">
+                            <i class="bi bi-grid-3x3-gap me-2"></i>
+                            Core System Modules
+                        </h3>
+                        
+                        <div class="row">
+                            <div class="col-md-6 mb-4">
+                                <div class="card h-100">
+                                    <div class="card-header bg-primary text-white">
+                                        <h5 class="mb-0"><i class="bi bi-people me-2"></i>User Management</h5>
+                                        <small><code>/admin/users</code></small>
+                                    </div>
+                                    <div class="card-body">
+                                        <p><strong>Purpose:</strong> Manage all system users</p>
+                                        <h6>Features:</h6>
+                                        <ul class="list-unstyled">
+                                            <li><i class="bi bi-eye text-info me-2"></i>View all users with their roles and website assignments</li>
+                                            <li><i class="bi bi-plus-circle text-success me-2"></i>Create new users</li>
+                                            <li><i class="bi bi-pencil text-warning me-2"></i>Edit user details (name, email, role)</li>
+                                            <li><i class="bi bi-toggle-on text-primary me-2"></i>Activate/deactivate user accounts</li>
+                                            <li><i class="bi bi-person-check text-success me-2"></i>Assign roles to users</li>
+                                            <li><i class="bi bi-clock-history text-info me-2"></i>View user login history</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="col-md-6 mb-4">
+                                <div class="card h-100">
+                                    <div class="card-header bg-success text-white">
+                                        <h5 class="mb-0"><i class="bi bi-shield me-2"></i>Role Management</h5>
+                                        <small><code>/admin/roles</code></small>
+                                    </div>
+                                    <div class="card-body">
+                                        <p><strong>Purpose:</strong> Define and manage user roles and their permissions</p>
+                                        <h6>Features:</h6>
+                                        <ul class="list-unstyled">
+                                            <li><i class="bi bi-plus-circle text-success me-2"></i>Create custom roles</li>
+                                            <li><i class="bi bi-key text-warning me-2"></i>Assign permissions to roles</li>
+                                            <li><i class="bi bi-arrow-left-right text-info me-2"></i>Dynamic permission management with real-time updates</li>
+                                            <li><i class="bi bi-diagram-2 text-primary me-2"></i>View role hierarchy and capabilities</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="col-md-6 mb-4">
+                                <div class="card h-100">
+                                    <div class="card-header bg-info text-white">
+                                        <h5 class="mb-0"><i class="bi bi-globe me-2"></i>Website Management</h5>
+                                        <small><code>/admin/websites</code></small>
+                                    </div>
+                                    <div class="card-body">
+                                        <p><strong>Purpose:</strong> Manage websites and user access to them</p>
+                                        <h6>Features:</h6>
+                                        <ul class="list-unstyled">
+                                            <li><i class="bi bi-plus-circle text-success me-2"></i>Create and manage websites</li>
+                                            <li><i class="bi bi-person-plus text-primary me-2"></i>Assign users to websites</li>
+                                            <li><i class="bi bi-shield-check text-warning me-2"></i>Control website-specific permissions</li>
+                                            <li><i class="bi bi-graph-up text-info me-2"></i>Monitor website usage</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="col-md-6 mb-4">
+                                <div class="card h-100">
+                                    <div class="card-header bg-warning text-dark">
+                                        <h5 class="mb-0"><i class="bi bi-bell me-2"></i>Dashboard Alerts</h5>
+                                        <small><code>/dashboard</code></small>
+                                    </div>
+                                    <div class="card-body">
+                                        <p><strong>Purpose:</strong> Real-time monitoring of users needing attention</p>
+                                        <h6>Alert Types:</h6>
+                                        <ul class="list-unstyled">
+                                            <li><i class="bi bi-exclamation-triangle text-danger me-2"></i><strong>Attention Needed:</strong> New users, missing assignments</li>
+                                            <li><i class="bi bi-clock text-warning me-2"></i><strong>Inactive Users:</strong> Users not logged in for 30+ days</li>
+                                            <li><i class="bi bi-eye-slash text-secondary me-2"></i><strong>Ignored Alerts:</strong> Dismissed notifications</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- Permission System Section -->
+                    <section class="mb-5">
+                        <h3 class="text-primary border-bottom pb-2">
+                            <i class="bi bi-key me-2"></i>
+                            Permission System Deep Dive
+                        </h3>
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h4>How Permissions Work</h4>
+                                <ol>
+                                    <li><strong>Role Creation:</strong> SuperAdmin creates roles with specific permissions</li>
+                                    <li><strong>User Assignment:</strong> Users are assigned to roles</li>
+                                    <li><strong>Website Access:</strong> Users are granted access to specific websites</li>
+                                    <li><strong>Feature Access:</strong> Permissions control which features users can access</li>
+                                    <li><strong>Dynamic Updates:</strong> Changes take effect immediately</li>
+                                </ol>
+                            </div>
+                            <div class="col-md-6">
+                                <h4>Permission Categories</h4>
+                                <div class="card">
+                                    <div class="card-body">
+                                        <h6><i class="bi bi-people text-primary me-2"></i>User Management Permissions</h6>
+                                        <ul class="list-unstyled small">
+                                            <li><code>User.Create</code>: Add new users to the system</li>
+                                            <li><code>User.Update</code>: Modify existing user details</li>
+                                            <li><code>User.Delete</code>: Remove users from the system</li>
+                                            <li><code>User.Read</code>: Access user management interface</li>
+                                        </ul>
+                                        
+                                        <hr class="my-3">
+                                        
+                                        <h6><i class="bi bi-shield text-success me-2"></i>Role Management Permissions</h6>
+                                        <ul class="list-unstyled small">
+                                            <li><code>Role.Create</code>: Create new user roles</li>
+                                            <li><code>Role.Update</code>: Modify role properties</li>
+                                            <li><code>Role.Delete</code>: Remove roles from system</li>
+                                            <li><code>Permission.Update</code>: Assign permissions to roles</li>
+                                        </ul>
+                                        
+                                        <hr class="my-3">
+                                        
+                                        <h6><i class="bi bi-globe text-info me-2"></i>Website Management Permissions</h6>
+                                        <ul class="list-unstyled small">
+                                            <li><code>Website.Create</code>: Add new websites</li>
+                                            <li><code>Website.Update</code>: Modify website properties</li>
+                                            <li><code>Website.Delete</code>: Remove websites</li>
+                                            <li><code>Website.Read</code>: View website information</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- Best Practices Section -->
+                    <section class="mb-5">
+                        <h3 class="text-primary border-bottom pb-2">
+                            <i class="bi bi-star me-2"></i>
+                            Best Practices
+                        </h3>
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="card border-success">
+                                    <div class="card-header bg-success text-white">
+                                        <h5 class="mb-0"><i class="bi bi-crown me-2"></i>For SuperAdmins</h5>
+                                    </div>
+                                    <div class="card-body">
+                                        <ol>
+                                            <li><strong>Regular Monitoring:</strong> Check dashboard alerts daily</li>
+                                            <li><strong>Role Design:</strong> Create roles based on job functions, not individuals</li>
+                                            <li><strong>Least Privilege:</strong> Grant minimum necessary permissions</li>
+                                            <li><strong>Documentation:</strong> Keep track of role purposes and permissions</li>
+                                            <li><strong>Regular Cleanup:</strong> Review and remove inactive users</li>
+                                        </ol>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="card border-info">
+                                    <div class="card-header bg-info text-white">
+                                        <h5 class="mb-0"><i class="bi bi-people me-2"></i>For Users</h5>
+                                    </div>
+                                    <div class="card-body">
+                                        <ol>
+                                            <li><strong>Understand Your Role:</strong> Know what permissions you have</li>
+                                            <li><strong>Report Issues:</strong> Contact SuperAdmin for access problems</li>
+                                            <li><strong>Secure Practices:</strong> Use strong passwords and log out when done</li>
+                                            <li><strong>Stay Active:</strong> Regular login prevents account deactivation</li>
+                                        </ol>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- Troubleshooting Section -->
+                    <section class="mb-5">
+                        <h3 class="text-primary border-bottom pb-2">
+                            <i class="bi bi-tools me-2"></i>
+                            Troubleshooting Common Issues
+                        </h3>
+                        
+                        <div class="row">
+                            <div class="col-md-4">
+                                <div class="card border-danger">
+                                    <div class="card-header bg-danger text-white">
+                                        <h6 class="mb-0">"Access Denied" Errors</h6>
+                                    </div>
+                                    <div class="card-body">
+                                        <ul class="list-unstyled small">
+                                            <li><i class="bi bi-check text-success me-2"></i>Check if you have the correct role assigned</li>
+                                            <li><i class="bi bi-check text-success me-2"></i>Verify your role has the required permission</li>
+                                            <li><i class="bi bi-check text-success me-2"></i>Ensure you have access to the specific website</li>
+                                            <li><i class="bi bi-check text-success me-2"></i>Contact SuperAdmin if issues persist</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="card border-warning">
+                                    <div class="card-header bg-warning text-dark">
+                                        <h6 class="mb-0">Missing Features</h6>
+                                    </div>
+                                    <div class="card-body">
+                                        <ul class="list-unstyled small">
+                                            <li><i class="bi bi-check text-success me-2"></i>Your role may not have the required permission</li>
+                                            <li><i class="bi bi-check text-success me-2"></i>You may not have access to the relevant website</li>
+                                            <li><i class="bi bi-check text-success me-2"></i>Your role may need to be updated with new permissions</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="card border-info">
+                                    <div class="card-header bg-info text-white">
+                                        <h6 class="mb-0">Alert Notifications</h6>
+                                    </div>
+                                    <div class="card-body">
+                                        <ul class="list-unstyled small">
+                                            <li><i class="bi bi-check text-success me-2"></i>Complete user setup by assigning role and website</li>
+                                            <li><i class="bi bi-check text-success me-2"></i>Decide whether to deactivate or ignore inactive users</li>
+                                            <li><i class="bi bi-check text-success me-2"></i>Review ignored alerts periodically</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- Security Features Section -->
+                    <section class="mb-5">
+                        <h3 class="text-primary border-bottom pb-2">
+                            <i class="bi bi-shield-lock me-2"></i>
+                            System Security Features
+                        </h3>
+                        
+                        <div class="row">
+                            <div class="col-md-4">
+                                <div class="text-center">
+                                    <i class="bi bi-globe text-primary" style="font-size: 3rem;"></i>
+                                    <h5>IP Safe Listing</h5>
+                                    <p class="small">Office networks are automatically whitelisted. SuperAdmin can add specific IPs for enhanced security.</p>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="text-center">
+                                    <i class="bi bi-clock text-warning" style="font-size: 3rem;"></i>
+                                    <h5>Session Management</h5>
+                                    <p class="small">Automatic logout for security. System records all login attempts and implements account lockout for failed attempts.</p>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="text-center">
+                                    <i class="bi bi-clipboard-data text-success" style="font-size: 3rem;"></i>
+                                    <h5>Audit Trail</h5>
+                                    <p class="small">All modifications are logged. System records who did what and when for compliance requirements.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- Getting Help Section -->
+                    <section class="mb-5">
+                        <h3 class="text-primary border-bottom pb-2">
+                            <i class="bi bi-question-circle me-2"></i>
+                            Getting Help
+                        </h3>
+                        
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h4>Self-Service</h4>
+                                <ol>
+                                    <li><strong>Check This Guide:</strong> Most questions are answered here</li>
+                                    <li><strong>Dashboard Alerts:</strong> System provides guidance on required actions</li>
+                                    <li><strong>Permission System:</strong> Clear indicators of what you can access</li>
+                                </ol>
+                            </div>
+                            <div class="col-md-6">
+                                <h4>Contact Support</h4>
+                                <ul class="list-unstyled">
+                                    <li><i class="bi bi-crown text-danger me-2"></i><strong>SuperAdmin:</strong> For role and permission issues</li>
+                                    <li><i class="bi bi-gear text-warning me-2"></i><strong>System Administrator:</strong> For technical problems</li>
+                                    <li><i class="bi bi-book text-info me-2"></i><strong>Documentation:</strong> Refer to this guide and system help</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- Footer -->
+                    <div class="alert alert-light border text-center">
+                        <p class="mb-0">
+                            <i class="bi bi-info-circle me-2"></i>
+                            <em>This guide is updated regularly to reflect system changes and improvements. For the latest version, check the system documentation or contact your SuperAdmin.</em>
+                        </p>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    protected override void OnInitialized()
+    {
+        // This page is accessible to all logged-in users without specific permissions
+        // No additional permission checks needed
+    }
+}
