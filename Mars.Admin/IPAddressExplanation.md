@@ -251,6 +251,3 @@ IsIPInRange("192.168.2.50", "192.168.1.0/24");  // False
 ## Summary
 
 The `192.168.1.0/24` notation allows access from **any device** on the office network (254 possible IP addresses), providing a secure way to grant admin access to all office employees while blocking external access. This is perfect for office environments where you want to allow all internal users but maintain security against external threats.
-
-
-
