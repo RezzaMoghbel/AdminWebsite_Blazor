@@ -55,6 +55,10 @@ All users have access to the following websites:
 - **User.Delete**: Remove users
 - **Quotes.Read**: Access quotes data
 - **Policies.Read**: Access policies data
+- **AccessLogs.Create**: Create access log entries
+- **AccessLogs.Read**: View unauthorized access logs
+- **AccessLogs.Update**: Modify access log entries
+- **AccessLogs.Delete**: Delete access log entries
 
 ## 🛡️ Security Features
 
