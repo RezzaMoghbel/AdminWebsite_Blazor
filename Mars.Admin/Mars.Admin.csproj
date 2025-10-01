@@ -15,11 +15,25 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
+    <PackageReference Include="Serilog.AspNetCore" Version="9.0.0" />
+    <PackageReference Include="Serilog.Sinks.MSSqlServer" Version="8.2.2" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Mars.Admin.DTOs\Mars.Admin.DTOs.csproj" />
     <ProjectReference Include="..\Mars.Admin.Engine\Mars.Admin.Engine.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Remove="web.config" />
+    <Content Remove="web.Development.config" />
+    <Content Remove="web.Staging.config" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="web.config" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="web.Development.config" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="web.Staging.config" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>
