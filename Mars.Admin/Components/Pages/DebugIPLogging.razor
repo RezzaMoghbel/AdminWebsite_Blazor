@@ -1,0 +1,211 @@
+@page "/debug-ip-logging"
+@using Mars.Admin.Data
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.EntityFrameworkCore
+@using Mars.Admin.Services
+@inject ApplicationDbContext DbContext
+@inject IUserScope UserScope
+@inject NavigationManager NavigationManager
+@attribute [Authorize]
+
+<PageTitle>Debug IP Logging</PageTitle>
+
+@if (!UserScope.IsSuperAdmin)
+{
+    <div class="alert alert-danger">
+        <h4>Access Denied</h4>
+        <p>Only SuperAdmin can access this debug page.</p>
+    </div>
+    return;
+}
+
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="mb-0">IP Logging Debug Information</h3>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h5>Current IP Audit Logs</h5>
+                            @if (isLoading)
+                            {
+                                <div class="text-center">
+                                    <div class="spinner-border spinner-border-sm" role="status">
+                                        <span class="visually-hidden">Loading...</span>
+                                    </div>
+                                </div>
+                            }
+                            else
+                            {
+                                <p><strong>Total Logs:</strong> @auditLogs.Count</p>
+                                @if (auditLogs.Any())
+                                {
+                                    <div class="table-responsive">
+                                        <table class="table table-sm">
+                                            <thead>
+                                                <tr>
+                                                    <th>IP</th>
+                                                    <th>Attempts</th>
+                                                    <th>Last Attempt</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                @foreach (var log in auditLogs.Take(10))
+                                                {
+                                                    <tr>
+                                                        <td><code>@log.IPAddress</code></td>
+                                                        <td>@log.AccessAttempts</td>
+                                                        <td>@log.LastAttemptAt.ToString("HH:mm:ss")</td>
+                                                    </tr>
+                                                }
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                }
+                                else
+                                {
+                                    <div class="alert alert-info">No IP audit logs found.</div>
+                                }
+                            }
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <h5>Test IP Logging</h5>
+                            <p>Click the button below to test the IP logging functionality:</p>
+                            <button class="btn btn-primary" @onclick="TestIPLogging">
+                                <i class="bi bi-bug"></i> Test IP Logging
+                            </button>
+                            
+                            @if (!string.IsNullOrEmpty(testResult))
+                            {
+                                <div class="alert alert-info mt-3">
+                                    <strong>Test Result:</strong><br>
+                                    @testResult
+                                </div>
+                            }
+                        </div>
+                    </div>
+                    
+                    <div class="row mt-4">
+                        <div class="col-12">
+                            <h5>Database Connection Test</h5>
+                            <button class="btn btn-outline-secondary" @onclick="TestDatabaseConnection">
+                                <i class="bi bi-database"></i> Test Database Connection
+                            </button>
+                            
+                            @if (!string.IsNullOrEmpty(dbTestResult))
+                            {
+                                <div class="alert alert-info mt-3">
+                                    <strong>Database Test:</strong><br>
+                                    @dbTestResult
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private List<AuditLogsIPSafelisting> auditLogs = new();
+    private bool isLoading = true;
+    private string testResult = "";
+    private string dbTestResult = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!UserScope.IsSuperAdmin)
+        {
+            NavigationManager.NavigateTo("/access-denied");
+            return;
+        }
+
+        await LoadAuditLogs();
+    }
+
+    private async Task LoadAuditLogs()
+    {
+        try
+        {
+            isLoading = true;
+            auditLogs = await DbContext.AuditLogsIPSafelistings
+                .OrderByDescending(log => log.LastAttemptAt)
+                .ToListAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading audit logs: {ex.Message}");
+            auditLogs = new List<AuditLogsIPSafelisting>();
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task TestIPLogging()
+    {
+        try
+        {
+            testResult = "Testing IP logging functionality...";
+            
+            // Create a test log entry
+            var testLog = new AuditLogsIPSafelisting
+            {
+                IPAddress = "192.168.1.999", // Test IP
+                UserAgent = "Debug Test Agent",
+                RequestPath = "/debug-test",
+                Referer = "Debug Test",
+                AccessAttempts = 1,
+                FirstAttemptAt = DateTime.UtcNow,
+                LastAttemptAt = DateTime.UtcNow,
+                CreatedAt = DateTime.UtcNow,
+                CreatedByUserId = "Debug Test",
+                IsActive = true
+            };
+
+            DbContext.AuditLogsIPSafelistings.Add(testLog);
+            await DbContext.SaveChangesAsync();
+            
+            testResult = "✅ Test IP log created successfully! Check the table above.";
+            await LoadAuditLogs(); // Refresh the display
+        }
+        catch (Exception ex)
+        {
+            testResult = $"❌ Error creating test log: {ex.Message}";
+        }
+    }
+
+    private async Task TestDatabaseConnection()
+    {
+        try
+        {
+            dbTestResult = "Testing database connection...";
+            
+            // Test basic connection
+            var canConnect = await DbContext.Database.CanConnectAsync();
+            
+            if (canConnect)
+            {
+                // Test table access
+                var tableExists = await DbContext.Database.ExecuteSqlRawAsync(
+                    "SELECT COUNT(*) FROM AuditLogsIPSafelistings") >= 0;
+                
+                dbTestResult = "✅ Database connection successful and table is accessible!";
+            }
+            else
+            {
+                dbTestResult = "❌ Cannot connect to database";
+            }
+        }
+        catch (Exception ex)
+        {
+            dbTestResult = $"❌ Database test failed: {ex.Message}";
+        }
+    }
+}

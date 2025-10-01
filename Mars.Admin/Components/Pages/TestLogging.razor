@@ -1,0 +1,163 @@
+@page "/test-logging"
+@using Microsoft.AspNetCore.Authorization
+@using Mars.Admin.Services
+@inject ILogger<TestLogging> Logger
+@inject IUserScope UserScope
+@inject NavigationManager NavigationManager
+@attribute [Authorize]
+
+<PageTitle>Test Logging</PageTitle>
+
+@if (!UserScope.IsSuperAdmin)
+{
+    <div class="alert alert-danger">
+        <h4>Access Denied</h4>
+        <p>Only SuperAdmin can access this test page.</p>
+    </div>
+    return;
+}
+
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="mb-0">Serilog Test Page</h3>
+                </div>
+                <div class="card-body">
+                    <p>This page tests the Serilog configuration. Check the following locations for log output:</p>
+                    
+                    <ul>
+                        <li><strong>Console:</strong> Application console output</li>
+                        <li><strong>File:</strong> <code>logs/mars-admin-[date].log</code></li>
+                        <li><strong>Security File:</strong> <code>logs/mars-admin-security-[date].log</code></li>
+                        <li><strong>Database:</strong> <code>Logs</code> table in SQL Server</li>
+                    </ul>
+
+                    <div class="row mt-4">
+                        <div class="col-md-6">
+                            <h5>Test Different Log Levels</h5>
+                            <div class="btn-group-vertical w-100" role="group">
+                                <button class="btn btn-outline-info" @onclick="TestInformation">
+                                    <i class="bi bi-info-circle"></i> Test Information Log
+                                </button>
+                                <button class="btn btn-outline-warning" @onclick="TestWarning">
+                                    <i class="bi bi-exclamation-triangle"></i> Test Warning Log
+                                </button>
+                                <button class="btn btn-outline-danger" @onclick="TestError">
+                                    <i class="bi bi-x-circle"></i> Test Error Log
+                                </button>
+                                <button class="btn btn-outline-dark" @onclick="TestStructuredLogging">
+                                    <i class="bi bi-code-square"></i> Test Structured Logging
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <h5>Test Security Logging</h5>
+                            <div class="btn-group-vertical w-100" role="group">
+                                <button class="btn btn-outline-warning" @onclick="TestSecurityWarning">
+                                    <i class="bi bi-shield-exclamation"></i> Test Security Warning
+                                </button>
+                                <button class="btn btn-outline-danger" @onclick="TestSecurityError">
+                                    <i class="bi bi-shield-x"></i> Test Security Error
+                                </button>
+                                <button class="btn btn-outline-info" @onclick="TestIPLogging">
+                                    <i class="bi bi-globe"></i> Test IP Logging
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    @if (!string.IsNullOrEmpty(testResult))
+                    {
+                        <div class="alert alert-info mt-4">
+                            <strong>Test Result:</strong><br>
+                            @testResult
+                        </div>
+                    }
+
+                    <div class="mt-4">
+                        <h5>Log File Locations</h5>
+                        <div class="alert alert-light">
+                            <strong>Development:</strong><br>
+                            <code>logs/mars-admin-2024-01-15.log</code><br>
+                            <code>logs/mars-admin-security-2024-01-15.log</code><br><br>
+                            
+                            <strong>Production:</strong><br>
+                            <code>/var/log/mars-admin/mars-admin-2024-01-15.log</code><br>
+                            <code>/var/log/mars-admin/mars-admin-security-2024-01-15.log</code>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private string testResult = "";
+
+    protected override void OnInitialized()
+    {
+        if (!UserScope.IsSuperAdmin)
+        {
+            NavigationManager.NavigateTo("/access-denied");
+            return;
+        }
+
+        // Log page access
+        Logger.LogInformation("Test logging page accessed by SuperAdmin {UserId}", UserScope.UserId);
+    }
+
+    private void TestInformation()
+    {
+        Logger.LogInformation("Test information log entry from SuperAdmin {UserId} at {Timestamp}", 
+            UserScope.UserId, DateTime.UtcNow);
+        testResult = "✅ Information log sent to console, file, and database";
+    }
+
+    private void TestWarning()
+    {
+        Logger.LogWarning("Test warning log entry from SuperAdmin {UserId} at {Timestamp}", 
+            UserScope.UserId, DateTime.UtcNow);
+        testResult = "⚠️ Warning log sent to console, file, security file, and database";
+    }
+
+    private void TestError()
+    {
+        var exception = new InvalidOperationException("This is a test exception for logging");
+        Logger.LogError(exception, "Test error log entry from SuperAdmin {UserId} at {Timestamp}", 
+            UserScope.UserId, DateTime.UtcNow);
+        testResult = "❌ Error log sent to console, file, security file, and database";
+    }
+
+    private void TestStructuredLogging()
+    {
+        Logger.LogInformation("Structured log test: User {UserId} performed action {Action} on resource {Resource} with result {Result}", 
+            UserScope.UserId, "TestLogging", "TestPage", "Success");
+        testResult = "📊 Structured log with multiple properties sent";
+    }
+
+    private void TestSecurityWarning()
+    {
+        Logger.LogWarning("SECURITY: Test security warning - Unauthorized access attempt from IP {ClientIP} to path {RequestPath}", 
+            "192.168.1.999", "/test-logging");
+        testResult = "🔒 Security warning sent to security file and database";
+    }
+
+    private void TestSecurityError()
+    {
+        var securityException = new UnauthorizedAccessException("Test security violation");
+        Logger.LogError(securityException, "SECURITY: Test security error - Authentication failure for user {UserId} from IP {ClientIP}", 
+            UserScope.UserId, "192.168.1.999");
+        testResult = "🚨 Security error sent to security file and database";
+    }
+
+    private void TestIPLogging()
+    {
+        Logger.LogWarning("IP Safe Listing Test: IP {ClientIP} attempted to access {RequestPath} from {UserAgent} at {Timestamp}", 
+            "203.0.113.1", "/admin/users", "Mozilla/5.0 (Test Browser)", DateTime.UtcNow);
+        testResult = "🌐 IP logging test sent to security file and database";
+    }
+}
