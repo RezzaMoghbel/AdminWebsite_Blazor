@@ -22,20 +22,22 @@ public class IpSafeListingMiddleware
             var clientIP = GetClientIPAddress(context);
             if (string.IsNullOrEmpty(clientIP))
             {
-                _logger.LogWarning("Could not determine client IP address");
-                RedirectToSafelyInsured(context);
+                _logger.LogWarning("Could not determine client IP address for request {RequestPath} from {UserAgent}", 
+                    context.Request.Path, context.Request.Headers["User-Agent"].FirstOrDefault());
+                await RedirectToSafelyInsuredAsync(context, dbContext);
                 return;
             }
 
-            _logger.LogDebug("Checking IP safe listing for: {ClientIP}", clientIP);
+            _logger.LogDebug("Checking IP safe listing for: {ClientIP} accessing {RequestPath}", clientIP, context.Request.Path);
 
             // A. First check if the client IP is in our safe listing table at all
             // This includes both office IPs (UserId = null) and individual IPs (UserId = assigned)
             var isIPInSafeListing = await IsIPInSafeListingAsync(dbContext, clientIP);
             if (!isIPInSafeListing)
             {
-                _logger.LogWarning("IP {ClientIP} is not in safe listing table - denying access", clientIP);
-                RedirectToSafelyInsured(context);
+                _logger.LogWarning("IP {ClientIP} is not in safe listing table - denying access to {RequestPath} from {UserAgent}", 
+                    clientIP, context.Request.Path, context.Request.Headers["User-Agent"].FirstOrDefault());
+                await RedirectToSafelyInsuredAsync(context, dbContext);
                 return;
             }
 
@@ -49,8 +51,9 @@ public class IpSafeListingMiddleware
                     var user = await dbContext.Users.FindAsync(userId);
                     if (user == null || !user.IsActive || user.IsDeleted)
                     {
-                        _logger.LogWarning("Authenticated user {UserId} is inactive or deleted, redirecting to Safely Insured", userId);
-                        RedirectToSafelyInsured(context);
+                        _logger.LogWarning("Authenticated user {UserId} is inactive or deleted, redirecting to Safely Insured from IP {ClientIP}", 
+                            userId, clientIP);
+                        await RedirectToSafelyInsuredAsync(context, dbContext);
                         return;
                     }
                 }
@@ -58,13 +61,13 @@ public class IpSafeListingMiddleware
 
             // If we reach here, user is not authenticated but IP is in safe listing
             // Allow access to login page - IP validation will happen during authentication
-            _logger.LogInformation("IP {ClientIP} is in safe listing - allowing access to login page", clientIP);
+            _logger.LogInformation("IP {ClientIP} is in safe listing - allowing access to {RequestPath}", clientIP, context.Request.Path);
             await _next(context);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error in IP safe listing middleware");
-            RedirectToSafelyInsured(context);
+            await RedirectToSafelyInsuredAsync(context, dbContext);
         }
     }
 
@@ -195,8 +198,83 @@ public class IpSafeListingMiddleware
         }
     }
 
-    private void RedirectToSafelyInsured(HttpContext context)
+    private async Task RedirectToSafelyInsuredAsync(HttpContext context, ApplicationDbContext dbContext)
     {
+        // Log the unauthorized access attempt before redirecting
+        await LogUnauthorizedAccessAsync(context, dbContext);
+        
         context.Response.Redirect("https://www.InsureDaily.co.uk");
+    }
+
+    private async Task LogUnauthorizedAccessAsync(HttpContext context, ApplicationDbContext dbContext)
+    {
+        try
+        {
+            var clientIP = GetClientIPAddress(context);
+            _logger.LogInformation("LogUnauthorizedAccessAsync called for IP: {ClientIP}", clientIP ?? "NULL");
+            
+            if (string.IsNullOrEmpty(clientIP))
+            {
+                _logger.LogWarning("Could not determine client IP address for logging");
+                return;
+            }
+
+            var userAgent = context.Request.Headers["User-Agent"].FirstOrDefault();
+            var requestPath = context.Request.Path.Value;
+            var referer = context.Request.Headers["Referer"].FirstOrDefault();
+
+            // Check if this IP already exists in the audit log
+            var existingLog = await dbContext.AuditLogsIPSafelistings
+                .FirstOrDefaultAsync(log => log.IPAddress == clientIP && log.IsActive);
+
+            if (existingLog != null)
+            {
+                // Update existing record
+                existingLog.AccessAttempts++;
+                existingLog.LastAttemptAt = DateTime.UtcNow;
+                existingLog.UpdatedAt = DateTime.UtcNow;
+                existingLog.UpdatedByUserId = "System";
+                
+                // Update additional context if available
+                if (!string.IsNullOrEmpty(userAgent) && existingLog.UserAgent != userAgent)
+                    existingLog.UserAgent = userAgent;
+                if (!string.IsNullOrEmpty(requestPath) && existingLog.RequestPath != requestPath)
+                    existingLog.RequestPath = requestPath;
+                if (!string.IsNullOrEmpty(referer) && existingLog.Referer != referer)
+                    existingLog.Referer = referer;
+
+                _logger.LogInformation("Updated unauthorized access log for IP {ClientIP} - Attempt #{AttemptCount}", 
+                    clientIP, existingLog.AccessAttempts);
+            }
+            else
+            {
+                // Create new record
+                var newLog = new AuditLogsIPSafelisting
+                {
+                    IPAddress = clientIP,
+                    UserAgent = userAgent,
+                    RequestPath = requestPath,
+                    Referer = referer,
+                    AccessAttempts = 1,
+                    FirstAttemptAt = DateTime.UtcNow,
+                    LastAttemptAt = DateTime.UtcNow,
+                    CreatedAt = DateTime.UtcNow,
+                    CreatedByUserId = "System",
+                    IsActive = true
+                };
+
+                dbContext.AuditLogsIPSafelistings.Add(newLog);
+                _logger.LogInformation("Created new unauthorized access log for IP {ClientIP}", clientIP);
+            }
+
+            await dbContext.SaveChangesAsync();
+            _logger.LogInformation("Successfully saved unauthorized access log for IP: {ClientIP}", clientIP);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error logging unauthorized access attempt for IP {ClientIP}", 
+                GetClientIPAddress(context));
+            // Don't rethrow - we don't want logging errors to break the redirect
+        }
     }
 }

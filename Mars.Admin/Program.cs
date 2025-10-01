@@ -15,17 +15,46 @@ using Mars.Admin.Services;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Data.SqlClient;
+using Serilog;
+using Serilog.Events;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Configure Serilog
+Log.Logger = new LoggerConfiguration()
+    .Enrich.FromLogContext()
+    .Enrich.WithProperty("Application", "Mars.Admin")
+    .Enrich.WithProperty("Environment", builder.Environment.EnvironmentName)
+    .WriteTo.Console()
+    .WriteTo.File(
+        path: "logs/mars-admin-.log",
+        rollingInterval: RollingInterval.Day,
+        retainedFileCountLimit: 30,
+        outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] {Message:lj} {Properties:j}{NewLine}{Exception}")
+    .WriteTo.File(
+        path: "logs/mars-admin-security-.log",
+        rollingInterval: RollingInterval.Day,
+        retainedFileCountLimit: 30,
+        restrictedToMinimumLevel: LogEventLevel.Warning,
+        outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] {Message:lj} {Properties:j}{NewLine}{Exception}")
+    .CreateLogger();
+
+builder.Host.UseSerilog();
 
 // 1) Read the connection string from the standard configuration chain.
 //    (appsettings.json -> appsettings.{Environment}.json -> UserSecrets (Dev) -> Environment Variables)
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
     ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found. Check appsettings.*.json, user secrets, or environment variables.");
 
-// 2) EF Core for Identity only. No app tables here � those will be Dapper later via Mars.Admin.Data.
+// 2) EF Core for Identity only. No app tables here those will be Dapper later via Mars.Admin.Data.
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseSqlServer(connectionString));
+    options.UseSqlServer(connectionString, sqlOptions =>
+    {
+        sqlOptions.EnableRetryOnFailure(
+            maxRetryCount: 3,
+            maxRetryDelay: TimeSpan.FromSeconds(30),
+            errorNumbersToAdd: null);
+    }));
 
 // 3) Helpful EF error pages during development (migrations, etc.)
 builder.Services.AddDatabaseDeveloperPageExceptionFilter();
@@ -105,11 +134,11 @@ using (var scope = app.Services.CreateScope())
         logger.LogInformation(" Database Provider: {Provider}", dbContext.Database.ProviderName);
         logger.LogInformation(" Connection Target: {Server} / {Database}", conn.DataSource, conn.Database);
 
-        await conn.OpenAsync();
-        logger.LogInformation(" Database connection successful");
-        await conn.CloseAsync();
+            await conn.OpenAsync();
+            logger.LogInformation(" Database connection successful");
+            await conn.CloseAsync();
         logger.LogInformation("---------------------------------------------------");
-
+            
         // Seed data
         var seedService = scope.ServiceProvider.GetRequiredService<SeedDataService>();
         await seedService.SeedAsync();
@@ -168,7 +197,7 @@ app.MapGet("/health/db", async (IConfiguration cfg) =>
         return Results.Text("OK", "text/plain"); // 200
     }
     catch (Exception ex)
-    {
+    { 
         return Results.Text($"UNHEALTHY: {ex.GetType().Name} - {ex.Message}",
             "text/plain", System.Text.Encoding.UTF8, statusCode: 503);
     }
@@ -185,8 +214,19 @@ app.MapGet("/debug-claims", (HttpContext context) =>
 
 // ---------------------------------------------------------------------
 
-app.Run();
-
+try
+{
+    Log.Information("Starting Mars.Admin application");
+    app.Run();
+}
+catch (Exception ex)
+{
+    Log.Fatal(ex, "Application terminated unexpectedly");
+}
+finally
+{
+    Log.CloseAndFlush();
+}
 
 // $ Get-Process -Name "Mars.Admin" -ErrorAction SilentlyContinue | Stop-Process -Force
 // $ netstat -ano | findstr :5065

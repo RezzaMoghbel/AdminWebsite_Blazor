@@ -87,7 +87,11 @@ public class SeedDataService
             new Permission { Name = "IPSafeListing.Create", Description = "Create IP safe listings", IsActive = true },
             new Permission { Name = "IPSafeListing.Read", Description = "Read IP safe listings", IsActive = true },
             new Permission { Name = "IPSafeListing.Update", Description = "Update IP safe listings", IsActive = true },
-            new Permission { Name = "IPSafeListing.Delete", Description = "Delete IP safe listings", IsActive = true }
+            new Permission { Name = "IPSafeListing.Delete", Description = "Delete IP safe listings", IsActive = true },
+            new Permission { Name = "AccessLogs.Create", Description = "Create access log entries", IsActive = true },
+            new Permission { Name = "AccessLogs.Read", Description = "Read access logs", IsActive = true },
+            new Permission { Name = "AccessLogs.Update", Description = "Update access log entries", IsActive = true },
+            new Permission { Name = "AccessLogs.Delete", Description = "Delete access log entries", IsActive = true }
         };
 
         foreach (var permission in permissions)
@@ -106,11 +110,11 @@ public class SeedDataService
     {
         var rolePermissions = new Dictionary<string, string[]>
         {
-            ["SuperAdmin"] = new[] { "User.Create", "User.Read", "User.Update", "User.Delete", "Role.Create", "Role.Read", "Role.Update", "Role.Delete", "Permission.Create", "Permission.Read", "Permission.Update", "Permission.Delete", "Website.Create", "Website.Read", "Website.Update", "Website.Delete", "Quotes.Read", "Policies.Read", "IPSafeListing.Create", "IPSafeListing.Read", "IPSafeListing.Update", "IPSafeListing.Delete" },
-            ["Developer"] = new[] { "User.Create", "User.Read", "User.Update", "User.Delete", "Role.Create", "Role.Read", "Role.Update", "Role.Delete", "Permission.Create", "Permission.Read", "Permission.Update", "Permission.Delete", "Website.Create", "Website.Read", "Website.Update", "Website.Delete", "Quotes.Read", "Policies.Read", "IPSafeListing.Create", "IPSafeListing.Read", "IPSafeListing.Update", "IPSafeListing.Delete" },
-            ["Manager"] = new[] { "User.Read", "Role.Read", "Permission.Read", "Website.Read", "Quotes.Read", "Policies.Read", "IPSafeListing.Read" },
+            ["SuperAdmin"] = new[] { "User.Create", "User.Read", "User.Update", "User.Delete", "Role.Create", "Role.Read", "Role.Update", "Role.Delete", "Permission.Create", "Permission.Read", "Permission.Update", "Permission.Delete", "Website.Create", "Website.Read", "Website.Update", "Website.Delete", "Quotes.Read", "Policies.Read", "IPSafeListing.Create", "IPSafeListing.Read", "IPSafeListing.Update", "IPSafeListing.Delete", "AccessLogs.Create", "AccessLogs.Read", "AccessLogs.Update", "AccessLogs.Delete" },
+            ["Developer"] = new[] { "User.Create", "User.Read", "User.Update", "User.Delete", "Role.Create", "Role.Read", "Role.Update", "Role.Delete", "Permission.Create", "Permission.Read", "Permission.Update", "Permission.Delete", "Website.Create", "Website.Read", "Website.Update", "Website.Delete", "Quotes.Read", "Policies.Read", "IPSafeListing.Create", "IPSafeListing.Read", "IPSafeListing.Update", "IPSafeListing.Delete", "AccessLogs.Create", "AccessLogs.Read", "AccessLogs.Update", "AccessLogs.Delete" },
+            ["Manager"] = new[] { "User.Read", "Role.Read", "Permission.Read", "Website.Read", "Quotes.Read", "Policies.Read", "IPSafeListing.Read", "AccessLogs.Read" },
             ["Customer Service"] = new[] { "User.Read", "Website.Read", "Quotes.Read", "Policies.Read" },
-            ["Account"] = new[] { "User.Read", "Role.Read", "Permission.Read", "Website.Read", "Quotes.Read", "Policies.Read", "IPSafeListing.Read" },
+            ["Account"] = new[] { "User.Read", "Role.Read", "Permission.Read", "Website.Read", "Quotes.Read", "Policies.Read", "IPSafeListing.Read", "AccessLogs.Read" },
             ["Viewer"] = new[] { "User.Read", "Role.Read", "Permission.Read", "Website.Read", "Quotes.Read", "Policies.Read" },
             ["Page Editor"] = new string[0] // No permissions from this set
         };
@@ -440,11 +444,11 @@ public class SeedDataService
             // Define the new permissions that should be added to existing roles
             var rolePermissionUpdates = new Dictionary<string, string[]>
             {
-                ["SuperAdmin"] = new[] { "Role.Create", "Role.Read", "Role.Update", "Role.Delete", "Permission.Create", "Permission.Read", "Permission.Update", "Permission.Delete", "Website.Create", "Website.Read", "Website.Update", "Website.Delete" },
-                ["Developer"] = new[] { "Role.Create", "Role.Read", "Role.Update", "Role.Delete", "Permission.Create", "Permission.Read", "Permission.Update", "Permission.Delete", "Website.Create", "Website.Read", "Website.Update", "Website.Delete" },
-                ["Manager"] = new[] { "User.Read", "Role.Read", "Permission.Read", "Website.Read", "IPSafeListing.Read" },
+                ["SuperAdmin"] = new[] { "Role.Create", "Role.Read", "Role.Update", "Role.Delete", "Permission.Create", "Permission.Read", "Permission.Update", "Permission.Delete", "Website.Create", "Website.Read", "Website.Update", "Website.Delete", "AccessLogs.Create", "AccessLogs.Read", "AccessLogs.Update", "AccessLogs.Delete" },
+                ["Developer"] = new[] { "Role.Create", "Role.Read", "Role.Update", "Role.Delete", "Permission.Create", "Permission.Read", "Permission.Update", "Permission.Delete", "Website.Create", "Website.Read", "Website.Update", "Website.Delete", "AccessLogs.Create", "AccessLogs.Read", "AccessLogs.Update", "AccessLogs.Delete" },
+                ["Manager"] = new[] { "User.Read", "Role.Read", "Permission.Read", "Website.Read", "IPSafeListing.Read", "AccessLogs.Read" },
                 ["Customer Service"] = new[] { "User.Read", "Website.Read" },
-                ["Account"] = new[] { "User.Read", "Role.Read", "Permission.Read", "Website.Read", "IPSafeListing.Read" },
+                ["Account"] = new[] { "User.Read", "Role.Read", "Permission.Read", "Website.Read", "IPSafeListing.Read", "AccessLogs.Read" },
                 ["Viewer"] = new[] { "User.Read", "Role.Read", "Permission.Read", "Website.Read" }
             };
 
