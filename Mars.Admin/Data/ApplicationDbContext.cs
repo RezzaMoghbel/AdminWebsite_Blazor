@@ -13,6 +13,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<UserWebsiteAccess> UserWebsiteAccesses { get; set; }
     public DbSet<IPSafeListing> IPSafeListings { get; set; }
     public DbSet<AuditLog> AuditLogs { get; set; }
+    public DbSet<AuditLogsIPSafelisting> AuditLogsIPSafelistings { get; set; }
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -110,6 +111,20 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
                 .WithMany(e => e.AuditLogs)
                 .HasForeignKey(e => e.PerformedByUserId)
                 .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        // Configure AuditLogsIPSafelisting
+        builder.Entity<AuditLogsIPSafelisting>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.IPAddress);
+            entity.Property(e => e.IPAddress).IsRequired().HasMaxLength(45);
+            entity.Property(e => e.UserAgent).HasMaxLength(200);
+            entity.Property(e => e.RequestPath).HasMaxLength(500);
+            entity.Property(e => e.Referer).HasMaxLength(100);
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("GETUTCDATE()");
+            entity.Property(e => e.FirstAttemptAt).HasDefaultValueSql("GETUTCDATE()");
+            entity.Property(e => e.LastAttemptAt).HasDefaultValueSql("GETUTCDATE()");
         });
 
         // Configure ApplicationUser UserRole relationship
