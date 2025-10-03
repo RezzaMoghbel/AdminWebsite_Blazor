@@ -41,10 +41,15 @@ Log.Logger = new LoggerConfiguration()
 
 builder.Host.UseSerilog();
 
-// 1) Read the connection string from the standard configuration chain.
-//    (appsettings.json -> appsettings.{Environment}.json -> UserSecrets (Dev) -> Environment Variables)
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
-    ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found. Check appsettings.*.json, user secrets, or environment variables.");
+// Set connection string based on environment
+string envName = builder.Environment.EnvironmentName;
+string connectionString = envName.ToLowerInvariant() switch
+{
+    "development" => "Server=Dev;Database=DBDev;User Id=User;Password=****;MultipleActiveResultSets=true;TrustServerCertificate=True",
+    "staging" => "Server=Stg;Database=DBStaging;User Id=User;Password=****;MultipleActiveResultSets=true;TrustServerCertificate=True",
+    "production" => "Server=Prd;Database=DBProduction;User Id=User;Password=****;MultipleActiveResultSets=true;TrustServerCertificate=True",
+    _ => throw new InvalidOperationException($"Unknown environment: {envName}")
+};
 
 // 2) EF Core for Identity only. No app tables here those will be Dapper later via Mars.Admin.Data.
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
